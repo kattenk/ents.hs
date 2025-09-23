@@ -1,4 +1,7 @@
-module LambdaGame (someFunc) where
+module LambdaGame (
+    module LambdaGame.Scene,
+    liftIO
+) where
 
-someFunc :: IO ()
-someFunc = putStrLn "someFunc"
+import LambdaGame.Scene
+import Control.Monad.IO.Class (liftIO)

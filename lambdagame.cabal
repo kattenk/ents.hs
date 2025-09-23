@@ -59,7 +59,8 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  LambdaGame
+    exposed-modules:  LambdaGame,
+                      LambdaGame.Scene
 
     -- Modules included in this rary but not exported.
     -- other-modules:
@@ -68,7 +69,10 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.21.0.0
+    build-depends:    base ^>=4.21.0.0,
+                      mtl ^>=2.2.2,
+                      vector ^>=0.13.2.0,
+                      containers ^>=0.6.7
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -79,4 +83,4 @@ library
 executable lambdagame-app
   main-is: Main.hs
   hs-source-dirs: app
-  build-depends: base, lambdagame
+  build-depends: base, lambdagame, containers ^>=0.6.7
