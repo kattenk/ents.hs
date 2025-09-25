@@ -1,13 +1,13 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RankNTypes #-}
-
--- {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables,
+             FlexibleInstances,
+             TypeFamilies,
+             MultiParamTypeClasses #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
   currentEnt, setResource, getResource,
-  getComponentVector
+  getComponentVec
 ) where
 
 import Data.Map.Strict (Map)
@@ -18,7 +18,6 @@ import Data.Typeable (Typeable, typeRep, typeOf, TypeRep)
 import Control.Monad.State.Strict hiding (get)
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
-import Control.Monad.Trans.Maybe
 
 -- | The 'Scene' Monad
 type Scene = StateT SceneState IO
@@ -55,36 +54,20 @@ getResource = do
     (Just dyn) -> return $ fromDynamic dyn
     Nothing -> return Nothing
 
-class ComponentAccess target where
-  get :: target -> Scene (Maybe a)
+class ComponentAccess target rt where
+  get :: target -> Scene (Maybe rt)
   set :: target -> Scene ()
-  -- has :: target -> Scene Bool  
+  -- has :: target -> Scene Bool
   -- remove :: target -> Scene ()
 
-getComponentVector ::
-  forall a.
-  (Typeable a) =>
-  a ->                    -- ^ The component to look-up
-  Bool ->                 -- ^ Try to create the vector if it doesn't exist?
-  Scene (Maybe (IOVector (Maybe a)))
-getComponentVector component shouldCreate = do
-  storage <- gets components
+-- | Internal function for retrieving a component vector from storage,
+-- for reading or writing to it.
+getComponentVec :: forall a. (Typeable a) => a -> Map TypeRep Dynamic -> Maybe (IOVector (Maybe a))
+getComponentVec component storage = do
+  dyn <- Map.lookup (typeOf component) storage
+  fromDynamic dyn :: Maybe (IOVector (Maybe a))
 
-  case Map.lookup (typeOf component) storage of
-    (Just dyn) -> case fromDynamic dyn :: Maybe (IOVector (Maybe a)) of
-      (Just componentVec) -> return (Just componentVec)
-      Nothing -> return Nothing
-    Nothing -> if shouldCreate then do
-                    slots <- gets entitySlots
-                    vec <- liftIO $ Vector.replicate slots (Nothing :: Maybe a)
-                    modify $ \ecs -> ecs { components = Map.insert (typeOf component)
-                                                                   (toDyn vec)
-                                                                   (components ecs) }
-                    return (Just vec)
-                    else return Nothing
-                                 
-
-instance {-# OVERLAPPABLE #-} Typeable a => ComponentAccess a where
+instance Typeable a => ComponentAccess a a where
   get a = do
     cur <- currentEnt
     get (cur, a)
@@ -93,12 +76,45 @@ instance {-# OVERLAPPABLE #-} Typeable a => ComponentAccess a where
     cur <- currentEnt
     set (cur, a)
 
-instance (Typeable a) => ComponentAccess (Int, a) where
-  get (i, a) = return Nothing
+instance (Typeable a) => ComponentAccess (Int, a) a where
+  get (i, x) = do
+    storage <- gets components
+
+    case getComponentVec x storage of
+      (Just vec) -> Vector.read vec i
+      Nothing -> return Nothing
+  
   set (i, x) = return ()
 
+-- | Internal function for retrieving a component vector from storage,
+-- for reading or writing to it.
+-- getComponentVec :: forall a. (Typeable a) => a -> Bool -> Scene (Maybe (IOVector (Maybe a)))
+-- getComponentVec component createIfNonexistent = do
+--   storage <- gets components
 
--- -- | Sets a component for an entity
--- setComponentOf :: Typeable a => Int -> a -> Scene ()
--- setComponentOf ent component = do
---     return ()
+--   runMaybeT $ do
+--     dyn <- MaybeT (pure (Map.lookup (typeOf component) storage))
+--     MaybeT (pure (fromDynamic dyn :: Maybe (IOVector (Maybe a))))
+
+-- getComponentVec ::
+--   forall a.
+--   (Typeable a) =>
+--   a ->                    -- ^ The component to look-up
+--   Bool ->                 -- ^ Should try to create the vector if it doesn't exist
+--   Scene (Maybe (IOVector (Maybe a)))
+-- getComponentVec component shouldCreate = do
+--   storage <- gets components
+
+--   case Map.lookup (typeOf component) storage of
+--     (Just dyn) -> case fromDynamic dyn :: Maybe (IOVector (Maybe a)) of
+--       (Just componentVec) -> return (Just componentVec)
+--       Nothing -> return Nothing
+--     Nothing -> if shouldCreate then do
+--                     slots <- gets entitySlots
+--                     vec <- liftIO $ Vector.replicate slots (Nothing :: Maybe a)
+--                     modify $ \ecs -> ecs { components = Map.insert (typeOf component)
+--                                                                    (toDyn vec)
+--                                                                    (components ecs) }
+--                     return (Just vec)
+--                     else return Nothing
+                                 
