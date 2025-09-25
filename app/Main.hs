@@ -1,26 +1,23 @@
+{-# LANGUAGE TypeApplications #-}
 module Main (main) where
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import LambdaGame
+import Data.Data (Proxy (Proxy))
 
 initialState = LambdaGame.SceneState
   { resources = Map.empty,
     components = Map.empty,
-    nextEntityIndex = 0,
-    entitySlots = 20, 
     recycleEntityIndices = [],
     currentEntity = 0
   }
 
 testAction :: Scene ()
 testAction = do
-  -- veca <- getComponentVector (Just 0) True
-  -- vec <- getComponentVector (Just 0) False
-  -- case vec of
-  --   (Just there) -> liftIO $ putStrLn "Hello! LambdaGame!"
-  --   Nothing -> liftIO $ putStrLn "Not there"
   id <- currentEnt
-  x <- get (1 :: Int, "Hello")
+
+  x <- get (Proxy :: Proxy Int)
+
   return ()
 
 main = do

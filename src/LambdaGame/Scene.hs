@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables, FlexibleInstances, TypeFamilies,
-             MultiParamTypeClasses, TypeOperators, TypeApplications#-}
+             MultiParamTypeClasses, TypeOperators, TypeApplications, UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
@@ -17,16 +18,16 @@ import Control.Monad.State.Strict hiding (get)
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
 
+-- data Ent = Ent { index :: Int, generation :: Int }
+
 -- | The 'Scene' Monad
 type Scene = StateT SceneState IO
 
 data SceneState = SceneState
-  { resources :: Map TypeRep Dynamic,  -- ^ Dynamic is the Resource itself
-    components :: Map TypeRep Dynamic, -- ^ Dynamic is 'IOVector (Maybe a)' for each Component a
-    nextEntityIndex :: Int,            -- ^ the next entity index
-    entitySlots :: Int,                -- ^ how many slots are there for entities
-    recycleEntityIndices :: [Int],     -- ^ IDs of entities that have been despawned
-    currentEntity :: Int               -- ^ the ID of the entity a System is running on
+  { resources            :: Map TypeRep Dynamic, -- ^ Dynamic is the Resource itself
+    components           :: Map TypeRep Dynamic, -- ^ Dynamic is 'IOVector (Maybe a)' for each Component a
+    recycleEntityIndices :: [Int],               -- ^ Reusable indices in the vectors
+    currentEntity        :: Int                  -- ^ The entity a System is running on
   }
 
 -- | Run a 'Scene' action, provided with an initial state
@@ -38,21 +39,38 @@ runScene initialState scene = runStateT scene initialState
 currentEnt :: Scene Int
 currentEnt = gets currentEntity
 
+class Typeable a => Rep a where
+  rep :: a -> TypeRep
+
+instance Typeable a => Rep a where
+  rep = typeOf
+
+instance {-# OVERLAPPING #-} Typeable a => Rep (Proxy a) where
+  rep _ = typeRep (Proxy @a)
+
 -- | Sets a Resource
-setResource :: Typeable r => r -> Scene ()
+setResource :: Rep r => r -> Scene ()
 setResource r =
-  modify $ \ecs -> ecs { resources = Map.insert (typeOf r) (toDyn r) (resources ecs) }
+  modify $ \ecs -> ecs { resources = Map.insert (rep r) (toDyn r) (resources ecs) }
+
+-- | Internal function for getting something from one of the Maps
+fromStorage :: forall a. Rep a => (SceneState -> Map TypeRep Dynamic) -> Scene (Maybe a)
+fromStorage f = do
+  storage <- gets f
+  return $ Map.lookup (rep (Proxy @a)) storage >>= fromDynamic
 
 -- | Gets a Resource based on what you expect from it
 -- e.g to get 'Time' you could do 'time <- getResource :: Scene (Maybe Time)'
-getResource :: forall a. Typeable a => Scene (Maybe a)
-getResource = do
-  theResources <- gets resources
-  case Map.lookup (typeRep (Proxy :: Proxy a)) theResources of
-    (Just dyn) -> return $ fromDynamic dyn
-    Nothing -> return Nothing
+getResource :: forall a. Rep a => Scene (Maybe a)
+getResource = fromStorage resources
+
+-- | Internal-only function for retrieving a component vector from storage,
+-- for reading or writing to it.
+getComponentVec :: forall a. Rep a => Scene (Maybe (IOVector (Maybe a)))
+getComponentVec = fromStorage components
 
 type family ReturnType t where
+  ReturnType (Proxy a) = (ReturnType a)
   ReturnType (Int, a) = a
   ReturnType a = a
 
@@ -62,7 +80,7 @@ class ComponentAccess t where
   -- has :: target -> Scene Bool
   -- remove :: target -> Scene ()
 
-instance (Typeable a, ReturnType a ~ a) => ComponentAccess a where
+instance (Rep a, ReturnType a ~ a) => ComponentAccess a where
   get a = do
     cur <- currentEnt
     get (cur, a)
@@ -71,21 +89,14 @@ instance (Typeable a, ReturnType a ~ a) => ComponentAccess a where
     cur <- currentEnt
     set (cur, a)
 
-instance {-# OVERLAPPING #-} (Typeable a, ReturnType a ~ a) => ComponentAccess (Int, a) where
-  get (i, x) = do
-    componentVec <- getComponentVec
+instance {-# OVERLAPPING #-} (Rep a, ReturnType a ~ a) => ComponentAccess (Int, a) where
+  get (i, _) = do
+    componentVec <- getComponentVec @a
     maybe (return Nothing)
           (`Vector.read` i)
           componentVec
-
+  
   set (i, x) = return ()
-
--- | Internal function for retrieving a component vector from storage,
--- for reading or writing to it.
-getComponentVec :: forall a. Typeable a => Scene (Maybe (IOVector (Maybe a)))
-getComponentVec = do
-  storage <- gets components
-  return $ Map.lookup (typeRep (Proxy @a)) storage >>= fromDynamic
 
 -- -- | Internal function for retrieving a component vector from storage,
 -- -- for reading or writing to it.
