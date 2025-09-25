@@ -1,13 +1,11 @@
-{-# LANGUAGE ScopedTypeVariables,
-             FlexibleInstances,
-             TypeFamilies,
-             MultiParamTypeClasses #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ScopedTypeVariables, FlexibleInstances, TypeFamilies,
+             MultiParamTypeClasses, TypeOperators, TypeApplications#-}
 
 module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
   currentEnt, setResource, getResource,
-  getComponentVec
+  getComponentVec,
+  ComponentAccess(..)
 ) where
 
 import Data.Map.Strict (Map)
@@ -54,20 +52,17 @@ getResource = do
     (Just dyn) -> return $ fromDynamic dyn
     Nothing -> return Nothing
 
-class ComponentAccess target rt where
-  get :: target -> Scene (Maybe rt)
-  set :: target -> Scene ()
+type family ReturnType t where
+  ReturnType (Int, a) = a
+  ReturnType a = a
+
+class ComponentAccess t where
+  get :: t -> Scene (Maybe (ReturnType t))
+  set :: t -> Scene ()
   -- has :: target -> Scene Bool
   -- remove :: target -> Scene ()
 
--- | Internal function for retrieving a component vector from storage,
--- for reading or writing to it.
-getComponentVec :: forall a. (Typeable a) => a -> Map TypeRep Dynamic -> Maybe (IOVector (Maybe a))
-getComponentVec component storage = do
-  dyn <- Map.lookup (typeOf component) storage
-  fromDynamic dyn :: Maybe (IOVector (Maybe a))
-
-instance Typeable a => ComponentAccess a a where
+instance (Typeable a, ReturnType a ~ a) => ComponentAccess a where
   get a = do
     cur <- currentEnt
     get (cur, a)
@@ -76,18 +71,24 @@ instance Typeable a => ComponentAccess a a where
     cur <- currentEnt
     set (cur, a)
 
-instance (Typeable a) => ComponentAccess (Int, a) a where
+instance {-# OVERLAPPING #-} (Typeable a, ReturnType a ~ a) => ComponentAccess (Int, a) where
   get (i, x) = do
-    storage <- gets components
+    componentVec <- getComponentVec
+    maybe (return Nothing)
+          (`Vector.read` i)
+          componentVec
 
-    case getComponentVec x storage of
-      (Just vec) -> Vector.read vec i
-      Nothing -> return Nothing
-  
   set (i, x) = return ()
 
 -- | Internal function for retrieving a component vector from storage,
 -- for reading or writing to it.
+getComponentVec :: forall a. Typeable a => Scene (Maybe (IOVector (Maybe a)))
+getComponentVec = do
+  storage <- gets components
+  return $ Map.lookup (typeRep (Proxy @a)) storage >>= fromDynamic
+
+-- -- | Internal function for retrieving a component vector from storage,
+-- -- for reading or writing to it.
 -- getComponentVec :: forall a. (Typeable a) => a -> Bool -> Scene (Maybe (IOVector (Maybe a)))
 -- getComponentVec component createIfNonexistent = do
 --   storage <- gets components
@@ -117,4 +118,3 @@ instance (Typeable a) => ComponentAccess (Int, a) a where
 --                                                                    (components ecs) }
 --                     return (Just vec)
 --                     else return Nothing
-                                 

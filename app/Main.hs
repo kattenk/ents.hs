@@ -12,13 +12,16 @@ initialState = LambdaGame.SceneState
     currentEntity = 0
   }
 
--- testAction :: Scene ()
--- testAction = do
---   veca <- getComponentVector (Just 0) True
---   vec <- getComponentVector (Just 0) False
---   case vec of
---     (Just there) -> liftIO $ putStrLn "Hello! LambdaGame!"
---     Nothing -> liftIO $ putStrLn "Not there"
+testAction :: Scene ()
+testAction = do
+  -- veca <- getComponentVector (Just 0) True
+  -- vec <- getComponentVector (Just 0) False
+  -- case vec of
+  --   (Just there) -> liftIO $ putStrLn "Hello! LambdaGame!"
+  --   Nothing -> liftIO $ putStrLn "Not there"
+  id <- currentEnt
+  x <- get (1 :: Int, "Hello")
+  return ()
 
 main = do
   runScene initialState testAction
