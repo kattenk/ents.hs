@@ -1,24 +1,24 @@
-{-# LANGUAGE TypeApplications #-}
 module Main (main) where
-
-import LambdaGame
+import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import LambdaGame
 
-data MyResource = MyResource {apple :: String, pear :: Int} deriving Show
-
-defaultECS :: SceneState
-defaultECS = SceneState { resources = Map.empty
-                        , currentEntity = 0}
+initialState = LambdaGame.SceneState
+  { resources = Map.empty,
+    components = Map.empty,
+    nextEntityIndex = 0,
+    entitySlots = 20, 
+    recycleEntityIndices = [],
+    currentEntity = 0
+  }
 
 testAction :: Scene ()
 testAction = do
-    setResource MyResource { apple = "Test", pear = 15}
-    setResource (Just "Test")
-    maybeResource <- getResource @MyResource
+  veca <- getComponentVector (Just 0) True
+  vec <- getComponentVector (Just 0) False
+  case vec of
+    (Just there) -> liftIO $ putStrLn "Hello! LambdaGame!"
+    Nothing -> liftIO $ putStrLn "Not there"
 
-    liftIO $ print maybeResource
-
-main :: IO ()
 main = do
-    _ <- runScene defaultECS testAction
-    putStrLn "Hello, Haskell"
+  runScene initialState testAction
