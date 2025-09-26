@@ -1,24 +1,46 @@
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Main (main) where
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import LambdaGame
-import Data.Data (Proxy (Proxy))
 
-initialState = LambdaGame.SceneState
-  { resources = Map.empty,
-    components = Map.empty,
-    recycleEntityIndices = [],
-    currentEntity = 0
-  }
+class SumArgs r f where
+  sumOf :: f -> r
 
-testAction :: Scene ()
-testAction = do
-  id <- currentEnt
+instance (a ~ ()) => SumArgs (IO a) String where
+    sumOf x = print x
 
-  x <- get (Proxy :: Proxy Int)
+instance (a ~ ()) => SumArgs (IO a) Char where
+    sumOf x = print x
 
-  return ()
+instance SumArgs r String => SumArgs (Char -> r) String where
+  sumOf x y = sumOf (x ++ ['x'])
 
+instance SumArgs r String => SumArgs (Char -> r) Char where
+  sumOf x y = sumOf ('x' : ['x'])
+
+main :: IO ()
 main = do
-  runScene initialState testAction
+    putStrLn "Hello"
+    sumOf 'h' 'i' 'h'
+    putStrLn "Hello"
+
+-- initialState = LambdaGame.SceneState
+--   { resources = Map.empty,
+--     components = Map.empty,
+--     recycleEntityIndices = [],
+--     currentEntity = 0
+--   }
+
+-- testAction :: Scene ()
+-- testAction = do
+--   id <- currentEnt
+
+--   set (5 :: Int)
+
+--   val <- get (0 :: Int)
+--   liftIO $ print val
+--   return ()
+
+-- main = do
+--   runScene initialState testAction

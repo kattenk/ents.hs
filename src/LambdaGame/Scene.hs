@@ -1,11 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables, FlexibleInstances, TypeFamilies,
-             MultiParamTypeClasses, TypeOperators, TypeApplications, UndecidableInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
+             TypeApplications, UndecidableInstances, FlexibleContexts #-}
 
 module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
   currentEnt, setResource, getResource,
-  getComponentVec,
+  Rep,
   ComponentAccess(..)
 ) where
 
@@ -17,6 +16,7 @@ import Data.Typeable (Typeable, typeRep, typeOf, TypeRep)
 import Control.Monad.State.Strict hiding (get)
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
+import Data.Maybe (isJust)
 
 -- data Ent = Ent { index :: Int, generation :: Int }
 
@@ -34,11 +34,14 @@ data SceneState = SceneState
 runScene :: SceneState -> Scene a -> IO (a, SceneState)
 runScene initialState scene = runStateT scene initialState
 
--- | Gets the current entity, this is automatically set by
+-- | Get the current entity, this is automatically set by
 -- the system runner to the entity the system is running on
 currentEnt :: Scene Int
 currentEnt = gets currentEntity
 
+-- | Something we can get a value-level type representation from,
+-- this class mostly exists so Proxies can also be used if a value
+-- of a given component type is not available, or a 'Proxy' is otherwise preferable
 class Typeable a => Rep a where
   rep :: a -> TypeRep
 
@@ -61,7 +64,7 @@ fromStorage f = do
 
 -- | Gets a Resource based on what you expect from it
 -- e.g to get 'Time' you could do 'time <- getResource :: Scene (Maybe Time)'
-getResource :: forall a. Rep a => Scene (Maybe a)
+getResource :: forall r. Rep r => Scene (Maybe r)
 getResource = fromStorage resources
 
 -- | Internal-only function for retrieving a component vector from storage,
@@ -70,17 +73,18 @@ getComponentVec :: forall a. Rep a => Scene (Maybe (IOVector (Maybe a)))
 getComponentVec = fromStorage components
 
 type family ReturnType t where
-  ReturnType (Proxy a) = (ReturnType a)
-  ReturnType (Int, a) = a
+  ReturnType (Int, a) = ReturnType a
+  ReturnType (Proxy a) = a
   ReturnType a = a
 
 class ComponentAccess t where
-  get :: t -> Scene (Maybe (ReturnType t))
-  set :: t -> Scene ()
-  -- has :: target -> Scene Bool
-  -- remove :: target -> Scene ()
+  get :: t -> Scene (Maybe (ReturnType t)) -- ^ Get a component
+  set :: t -> Scene ()                     -- ^ Set a component
+  has :: t -> Scene Bool                   -- ^ Check if an entity has a component
+  remove :: t -> Scene ()                  -- ^ Remove a component from an entity
 
-instance (Rep a, ReturnType a ~ a) => ComponentAccess a where
+-- | Access the current entity's components
+instance (Rep a, Rep (ReturnType a)) => ComponentAccess a where
   get a = do
     cur <- currentEnt
     get (cur, a)
@@ -88,15 +92,44 @@ instance (Rep a, ReturnType a ~ a) => ComponentAccess a where
   set a = do
     cur <- currentEnt
     set (cur, a)
+  
+  has a = do
+    cur <- currentEnt
+    has (cur, a)
 
-instance {-# OVERLAPPING #-} (Rep a, ReturnType a ~ a) => ComponentAccess (Int, a) where
+  remove a = do
+    cur <- currentEnt
+    remove (cur, a)
+
+-- | Access a specific entity's components
+instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a)) => ComponentAccess (Int, a) where
   get (i, _) = do
-    componentVec <- getComponentVec @a
+    componentVec <- getComponentVec
+
     maybe (return Nothing)
           (`Vector.read` i)
           componentVec
+
+  set (i, c) = do
+    componentVec <- getComponentVec
+    case componentVec of
+      (Just vec) -> liftIO $ Vector.write vec i (Just c)
+      Nothing -> pure ()
   
-  set (i, x) = return ()
+  has (i, c) = do
+    -- May be a bug with proxies and @a instead of ReturnType a?
+    componentVec <- getComponentVec @a
+    case componentVec of
+      Nothing -> return False
+      (Just vec) -> do val <- liftIO $ Vector.read vec i
+                       return $ isJust val
+  
+  remove (i, c) = do
+    componentVec <- getComponentVec @a
+    case componentVec of
+      Nothing -> return ()
+      (Just vec) -> do
+        liftIO $ Vector.write vec i Nothing
 
 -- -- | Internal function for retrieving a component vector from storage,
 -- -- for reading or writing to it.
