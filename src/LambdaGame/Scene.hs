@@ -9,7 +9,8 @@ module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
   currentEnt, setResource, getResource,
   ComponentAccess(..),
-  SpawnWithComponent(..)
+  SpawnWithComponent(..),
+  Spawn(..)
 ) where
 
 import Data.Map.Strict (Map)
@@ -111,7 +112,7 @@ instance (Rep a, Rep (ReturnType a)) => ComponentAccess a where
 -- | Access a specific entity's components
 instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => ComponentAccess (i, a) where
   get (i, _) = do
-    componentVec <- getComponentVec 
+    componentVec <- getComponentVec
 
     maybe (return Nothing)
           (`Vector.read` fromIntegral i)
@@ -157,7 +158,7 @@ instance Rep c => SpawnWithComponent c where
         -- grow all of the existing component vectors to fit the new entity
         grow <- gets growComponents
         grow
-        return $ ec
+        return ec
 
     -- per component
     maybeComponentVec <- getComponentVec @c
@@ -178,18 +179,80 @@ instance Rep c => SpawnWithComponent c where
                  case maybeVec of
                    Nothing -> return ()
                    (Just vecToGrow) -> do
-                    grownVec <- liftIO $ Vector.grow vecToGrow 1
-                    liftIO $ Vector.write grownVec (Vector.length grownVec - 1) Nothing
+                      grownVec <- liftIO $ Vector.grow vecToGrow 1
+                      liftIO $ Vector.write grownVec (Vector.length grownVec - 1) Nothing
 
-                    liftIO $ putStrLn $ "grew vector for "
-                      ++ show (typeRep (Proxy @c)) ++ " to length " ++ show (Vector.length grownVec)
+                      liftIO $ putStrLn $ "grew vector for "
+                        ++ show (typeRep (Proxy @c)) ++ " to length " ++ show (Vector.length grownVec)
 
-                    modify $ \scnState ->
-                      scnState { components = Map.insert (rep a)
-                                                         (toDyn grownVec)
-                                                         (components scnState) }
-                    return () }
+                      modify $ \scnState ->
+                        scnState { components = Map.insert (rep a)
+                                                           (toDyn grownVec)
+                                                           (components scnState) }
+                      return () }
 
         return vec
 
     Vector.write componentVec chosenIndex (Just a)
+
+type ComponentAdder = (Int -> Scene ())
+
+class Typeable c => MakeComponentAdder c where
+  makeComponentAdder :: c -> ComponentAdder
+
+instance Typeable c => MakeComponentAdder c where
+  makeComponentAdder a index = do
+      maybeComponentVec <- getComponentVec @c
+      componentVec <- case maybeComponentVec of
+        (Just vec) -> return vec
+        Nothing -> do
+          slots <- gets entityCount
+          vec <- liftIO $ Vector.replicate slots (Nothing :: Maybe a)
+
+          modify $ \scnState -> scnState
+            { components = Map.insert (rep a)
+                                      (toDyn vec)
+                                      (components scnState) }
+
+          modify $ \scnState -> scnState
+            { growComponents = growComponents scnState >>
+                do maybeVec <- getComponentVec @c
+                   case maybeVec of
+                    Nothing -> return ()
+                    (Just vecToGrow) -> do
+                        grownVec <- liftIO $ Vector.grow vecToGrow 1
+                        liftIO $ Vector.write grownVec (Vector.length grownVec - 1) Nothing
+
+                        liftIO $ putStrLn $ "grew vector for "
+                          ++ show (typeRep (Proxy @c)) ++ " to length " ++ show (Vector.length grownVec)
+
+                        modify $ \scnState ->
+                          scnState { components = Map.insert (rep a)
+                                                             (toDyn grownVec)
+                                                             (components scnState) }
+                        return () }
+
+          return vec
+
+      Vector.write componentVec index (Just a)
+
+class Spawn f r where
+  spawn :: f -> r
+
+instance (a ~ ()) => Spawn [ComponentAdder] (Scene a) where
+  spawn x = do
+    liftIO $ putStrLn "Calculating"
+    liftIO $ putStrLn $ "with " ++ (show (length x)) ++ " arguments"
+
+instance {-# OVERLAPS #-} (a ~ (), Typeable b) => Spawn b (Scene a) where
+  spawn x = do
+    liftIO $ putStrLn "One arg"
+
+instance (Typeable a, Spawn [ComponentAdder] r) => Spawn [ComponentAdder] (a -> r) where
+  spawn x y = spawn (x ++ [makeComponentAdder y])
+
+instance {-# OVERLAPPABLE #-} (Typeable a, Spawn [ComponentAdder] r) => Spawn a (a -> r) where
+  spawn x y = spawn $ makeComponentAdder x : [makeComponentAdder y]
+
+instance {-# OVERLAPPABLE #-} (Typeable a, Typeable b, Spawn [ComponentAdder] r) => Spawn a (b -> r) where
+  spawn x y = spawn $ makeComponentAdder x : [makeComponentAdder y]

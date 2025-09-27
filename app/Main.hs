@@ -1,10 +1,21 @@
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies, ConstraintKinds #-}
 module Main (main) where
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
+import Data.Char (toUpper)
+import Debug.Trace (trace)
+import Data.Typeable (Typeable, cast)
 import LambdaGame
-import Data.Data (Proxy (Proxy))
-import Control.Monad.State.Strict hiding (get)
+import qualified Data.Map as Map
+
+testAction :: Scene ()
+testAction = do
+  liftIO $ putStrLn "Hi"
+  spawn (5 :: Int) "" (5 :: Int) (5 :: Int) (5 :: Int)
+  liftIO $ putStrLn "Hi"
+
 
 initialState = LambdaGame.SceneState
   { resources = Map.empty,
@@ -15,17 +26,8 @@ initialState = LambdaGame.SceneState
     currentEntity = 0
   }
 
-testAction :: Scene ()
-testAction = do
-  spawnWithComponent (21 :: Int)
-  spawnWithComponent (31 :: Int)
-  spawnWithComponent "hi"
-  spawnWithComponent "metoo"
-  set (0, "Waow")
-  doesHas <- has (3, 4 :: Int)
-  nthVal <- get (0, Proxy :: Proxy String)
-  liftIO $ print nthVal
-  return ()
-
+main :: IO ()
 main = do
-  runScene initialState testAction
+    putStrLn "Hello"
+    runScene initialState testAction
+    putStrLn "Hello"
