@@ -19,7 +19,11 @@ testAction :: Scene ()
 testAction = do
   spawnWithComponent (21 :: Int)
   spawnWithComponent (31 :: Int)
-  nthVal <- get (0, Proxy :: Proxy Int)
+  spawnWithComponent "hi"
+  spawnWithComponent "metoo"
+  set (0, "Waow")
+  doesHas <- has (3, 4 :: Int)
+  nthVal <- get (0, Proxy :: Proxy String)
   liftIO $ print nthVal
   return ()
 

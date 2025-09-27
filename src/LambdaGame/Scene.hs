@@ -8,7 +8,6 @@
 module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
   currentEnt, setResource, getResource,
-  Rep,
   ComponentAccess(..),
   SpawnWithComponent(..)
 ) where
@@ -78,16 +77,18 @@ getComponentVec = do
   storage <- gets components
   return $ Map.lookup (rep (Proxy @a)) storage >>= fromDynamic
 
-type family ReturnType t where
-  ReturnType (i, a) = ReturnType a
-  ReturnType (Proxy a) = a
-  ReturnType a = a
-
 class ComponentAccess t where
   get :: t -> Scene (Maybe (ReturnType t)) -- ^ Get a component
   set :: t -> Scene ()                     -- ^ Set a component
   has :: t -> Scene Bool                   -- ^ Check if an entity has a component
   remove :: t -> Scene ()                  -- ^ Remove a component from an entity
+
+-- Used to establish that the return type of 'get'
+-- is gathered from the input type, even though _how_ it is gathered varies
+type family ReturnType t where
+  ReturnType (i, a) = ReturnType a
+  ReturnType (Proxy a) = a
+  ReturnType a = a
 
 -- | Access the current entity's components
 instance (Rep a, Rep (ReturnType a)) => ComponentAccess a where
@@ -110,12 +111,12 @@ instance (Rep a, Rep (ReturnType a)) => ComponentAccess a where
 -- | Access a specific entity's components
 instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => ComponentAccess (i, a) where
   get (i, _) = do
-    componentVec <- getComponentVec
+    componentVec <- getComponentVec 
 
     maybe (return Nothing)
           (`Vector.read` fromIntegral i)
           componentVec
-  
+
   set (i, c) = do
     componentVec <- getComponentVec
     case componentVec of
@@ -123,24 +124,23 @@ instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => Componen
       Nothing -> pure ()
 
   has (i, _) = do
-    -- May be a bug with proxies and @a instead of ReturnType a?
-    componentVec <- getComponentVec @a
+    componentVec <- getComponentVec @(ReturnType a)
     case componentVec of
       Nothing -> return False
       (Just vec) -> do val <- liftIO $ Vector.read vec (fromIntegral i)
                        return $ isJust val
 
   remove (i, _) = do
-    componentVec <- getComponentVec @a
+    componentVec <- getComponentVec @(ReturnType a)
     case componentVec of
       Nothing -> return ()
       (Just vec) -> do
         liftIO $ Vector.write vec (fromIntegral i) Nothing
 
-class (Rep c, Show c) => SpawnWithComponent c where
+class Rep c => SpawnWithComponent c where
   spawnWithComponent :: c -> Scene ()
 
-instance (Rep c, Show c) => SpawnWithComponent c where
+instance Rep c => SpawnWithComponent c where
   spawnWithComponent a = do
     reuseableIndices <- gets reusableIndices
     scnState <- State.get
@@ -167,52 +167,29 @@ instance (Rep c, Show c) => SpawnWithComponent c where
         slots <- gets entityCount
         vec <- liftIO $ Vector.replicate slots (Nothing :: Maybe a)
 
-        modify $ \ecs -> ecs { components = Map.insert (rep a)
-                                                       (toDyn vec)
-                                                       (components ecs) }
+        modify $ \scnState -> scnState
+          { components = Map.insert (rep a)
+                                    (toDyn vec)
+                                    (components scnState) }
 
-        modify $ \ecs -> ecs
-          { growComponents = growComponents ecs >>
-              do mv <- getComponentVec @c
-                 case mv of
+        modify $ \scnState -> scnState
+          { growComponents = growComponents scnState >>
+              do maybeVec <- getComponentVec @c
+                 case maybeVec of
                    Nothing -> return ()
-                   (Just innerVec) -> do _ <- liftIO $ Vector.grow innerVec 1
-                                         return () }
+                   (Just vecToGrow) -> do
+                    grownVec <- liftIO $ Vector.grow vecToGrow 1
+                    liftIO $ Vector.write grownVec (Vector.length grownVec - 1) Nothing
+
+                    liftIO $ putStrLn $ "grew vector for "
+                      ++ show (typeRep (Proxy @c)) ++ " to length " ++ show (Vector.length grownVec)
+
+                    modify $ \scnState ->
+                      scnState { components = Map.insert (rep a)
+                                                         (toDyn grownVec)
+                                                         (components scnState) }
+                    return () }
 
         return vec
 
-    liftIO $ Vector.write componentVec chosenIndex (Just a)
-
-    return ()
-
--- -- | Internal function for retrieving a component vector from storage,
--- -- for reading or writing to it.
--- getComponentVec :: forall a. (Typeable a) => a -> Bool -> Scene (Maybe (IOVector (Maybe a)))
--- getComponentVec component createIfNonexistent = do
---   storage <- gets components
-
---   runMaybeT $ do
---     dyn <- MaybeT (pure (Map.lookup (typeOf component) storage))
---     MaybeT (pure (fromDynamic dyn :: Maybe (IOVector (Maybe a))))
-
--- getComponentVec ::
---   forall a.
---   (Typeable a) =>
---   a ->                    -- ^ The component to look-up
---   Bool ->                 -- ^ Should try to create the vector if it doesn't exist
---   Scene (Maybe (IOVector (Maybe a)))
--- getComponentVec component shouldCreate = do
---   storage <- gets components
-
---   case Map.lookup (typeOf component) storage of
---     (Just dyn) -> case fromDynamic dyn :: Maybe (IOVector (Maybe a)) of
---       (Just componentVec) -> return (Just componentVec)
---       Nothing -> return Nothing
---     Nothing -> if shouldCreate then do
---                     slots <- gets entitySlots
---                     vec <- liftIO $ Vector.replicate slots (Nothing :: Maybe a)
---                     modify $ \ecs -> ecs { components = Map.insert (typeOf component)
---                                                                    (toDyn vec)
---                                                                    (components ecs) }
---                     return (Just vec)
---                     else return Nothing
+    Vector.write componentVec chosenIndex (Just a)
