@@ -17,9 +17,9 @@ initialState = LambdaGame.SceneState
 
 testAction :: Scene ()
 testAction = do
-  spawnWithComponent (7 :: Int)
-  set (21 :: Int)
-  nthVal <- get (5 :: Int)
+  spawnWithComponent (21 :: Int)
+  spawnWithComponent (31 :: Int)
+  nthVal <- get (0, Proxy :: Proxy Int)
   liftIO $ print nthVal
   return ()
 

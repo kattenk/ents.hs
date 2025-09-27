@@ -3,6 +3,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use join" #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
@@ -63,24 +64,22 @@ setResource :: Rep r => r -> Scene ()
 setResource r =
   modify $ \ecs -> ecs { resources = Map.insert (rep r) (toDyn r) (resources ecs) }
 
--- | Internal function for getting something from one of the Maps
-fromStorage :: forall a. Rep a => (SceneState -> Map TypeRep Dynamic) -> Scene (Maybe a)
-fromStorage f = do
-  storage <- gets f
-  return $ Map.lookup (rep (Proxy @a)) storage >>= fromDynamic
-
 -- | Gets a Resource based on what you expect from it
 -- e.g to get 'Time' you could do 'time <- getResource :: Scene (Maybe Time)'
 getResource :: forall r. Rep r => Scene (Maybe r)
-getResource = fromStorage resources
+getResource = do
+  storage <- gets resources
+  return $ Map.lookup (rep (Proxy @r)) storage >>= fromDynamic
 
 -- | Internal-only function for retrieving a component vector from storage,
 -- for reading or writing to it.
 getComponentVec :: forall a. Rep a => Scene (Maybe (IOVector (Maybe a)))
-getComponentVec = fromStorage components
+getComponentVec = do
+  storage <- gets components
+  return $ Map.lookup (rep (Proxy @a)) storage >>= fromDynamic
 
 type family ReturnType t where
-  ReturnType (Int, a) = ReturnType a
+  ReturnType (i, a) = ReturnType a
   ReturnType (Proxy a) = a
   ReturnType a = a
 
@@ -109,36 +108,34 @@ instance (Rep a, Rep (ReturnType a)) => ComponentAccess a where
     remove (cur, a)
 
 -- | Access a specific entity's components
-instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a)) => ComponentAccess (Int, a) where
+instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => ComponentAccess (i, a) where
   get (i, _) = do
     componentVec <- getComponentVec
 
     maybe (return Nothing)
-          (`Vector.read` i)
+          (`Vector.read` fromIntegral i)
           componentVec
-
+  
   set (i, c) = do
-    componentVec <- getComponentVec @a
+    componentVec <- getComponentVec
     case componentVec of
-      (Just vec) -> liftIO $ Vector.write vec i (Just c)
-      Nothing -> do
-        liftIO $ putStrLn $ "no component vec" ++ show (rep c)
-        pure ()
+      (Just vec) -> liftIO $ Vector.write vec (fromIntegral i) (Just c)
+      Nothing -> pure ()
 
-  has (i, c) = do
+  has (i, _) = do
     -- May be a bug with proxies and @a instead of ReturnType a?
     componentVec <- getComponentVec @a
     case componentVec of
       Nothing -> return False
-      (Just vec) -> do val <- liftIO $ Vector.read vec i
+      (Just vec) -> do val <- liftIO $ Vector.read vec (fromIntegral i)
                        return $ isJust val
 
-  remove (i, c) = do
+  remove (i, _) = do
     componentVec <- getComponentVec @a
     case componentVec of
       Nothing -> return ()
       (Just vec) -> do
-        liftIO $ Vector.write vec i Nothing
+        liftIO $ Vector.write vec (fromIntegral i) Nothing
 
 class (Rep c, Show c) => SpawnWithComponent c where
   spawnWithComponent :: c -> Scene ()
@@ -169,7 +166,7 @@ instance (Rep c, Show c) => SpawnWithComponent c where
       Nothing -> do
         slots <- gets entityCount
         vec <- liftIO $ Vector.replicate slots (Nothing :: Maybe a)
-        liftIO $ putStrLn $ "creating new vector of size " ++ show slots ++ "to store " ++ show (typeOf a)
+
         modify $ \ecs -> ecs { components = Map.insert (rep a)
                                                        (toDyn vec)
                                                        (components ecs) }
@@ -179,30 +176,12 @@ instance (Rep c, Show c) => SpawnWithComponent c where
               do mv <- getComponentVec @c
                  case mv of
                    Nothing -> return ()
-                   (Just vec) -> do _ <- liftIO $ Vector.grow vec 1
-                                    return () }
+                   (Just innerVec) -> do _ <- liftIO $ Vector.grow innerVec 1
+                                         return () }
 
         return vec
 
-    liftIO $ putStrLn $ "writing into index " ++ show chosenIndex
     liftIO $ Vector.write componentVec chosenIndex (Just a)
-
-    mcv <- gets components
-    let x = Map.lookup (rep (Proxy @c)) mcv
-    p <- case x of
-      (Just y) -> do
-        let z = fromDynamic y :: Maybe (IOVector (Maybe c))
-        liftIO $ putStrLn $ "z is " ++ show (isJust z)
-        case z of
-          (Just ah) -> do liftIO $ Vector.read ah 0
-          Nothing -> return Nothing
-      Nothing -> return Nothing
-    
-    case p of
-      (Just ji) -> do
-        liftIO $ putStrLn $ "p is " ++ show ji
-        return ()
-      Nothing -> return ()
 
     return ()
 
