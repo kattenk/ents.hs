@@ -84,4 +84,4 @@ library
 executable lambdagame-app
   main-is: Main.hs
   hs-source-dirs: app
-  build-depends: base, lambdagame, containers ^>=0.6.7
+  build-depends: mtl ^>=2.2.2, base, lambdagame, containers ^>=0.6.7
