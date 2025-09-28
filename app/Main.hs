@@ -3,18 +3,40 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies, ConstraintKinds #-}
+{-# LANGUAGE TypeApplications #-}
 module Main (main) where
 import Data.Char (toUpper)
 import Debug.Trace (trace)
 import Data.Typeable (Typeable, cast)
 import LambdaGame
 import qualified Data.Map as Map
+import Data.Data (Proxy(..))
+import Data.Maybe (fromMaybe)
+import Data.Data (typeOf)
+
+data Position = Position Int Int deriving Show
 
 testAction :: Scene ()
 testAction = do
-  liftIO $ putStrLn "Hi"
-  spawn (5 :: Int) "" (5 :: Int) (5 :: Int) (5 :: Int)
-  liftIO $ putStrLn "Hi"
+  despawn (2 :: Int)
+
+  spawn (32 :: Int)
+        (Position 2 3)
+        "Hello i am one"
+  
+  spawn (32 :: Int)
+        "Hello i am two"
+        (Position 6 4)
+  
+  spawn (32 :: Int)
+        "Hello i am three"
+        (Position 6 4)
+
+  val <- get (2, Proxy @[Char])
+
+  case val of
+    Nothing -> liftIO $ putStrLn "was nothing"
+    (Just v) -> liftIO $ putStrLn $ "it is " ++ show v
 
 
 initialState = LambdaGame.SceneState
@@ -28,6 +50,5 @@ initialState = LambdaGame.SceneState
 
 main :: IO ()
 main = do
-    putStrLn "Hello"
-    runScene initialState testAction
-    putStrLn "Hello"
+  runScene initialState testAction
+  return ()

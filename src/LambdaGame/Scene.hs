@@ -1,16 +1,11 @@
-{-# LANGUAGE ScopedTypeVariables, FlexibleInstances, TypeFamilies,
-             TypeApplications, UndecidableInstances, FlexibleContexts #-}
-{-# LANGUAGE BlockArguments #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use join" #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables, FlexibleInstances, TypeFamilies, TypeOperators,
+             TypeApplications, UndecidableInstances, FlexibleContexts, MultiParamTypeClasses #-}
 
 module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
   currentEnt, setResource, getResource,
   ComponentAccess(..),
-  SpawnWithComponent(..),
-  Spawn(..)
+  Spawn(..), Despawn(..)
 ) where
 
 import Data.Map.Strict (Map)
@@ -29,14 +24,15 @@ import Data.Maybe (isJust)
 -- | The 'Scene' Monad
 type Scene = StateT SceneState IO
 
-data SceneState = SceneState
-  { resources            :: Map TypeRep Dynamic, -- ^ Dynamic is the Resource itself
-    components           :: Map TypeRep Dynamic, -- ^ Dynamic is 'IOVector (Maybe a)' for each Component a
-    entityCount          :: Int,                 -- ^ Entity count
-    growComponents       :: Scene (),            -- ^ An action for growing all of the component vectors
-    reusableIndices      :: [Int],               -- ^ Reusable indices in the vectors
-    currentEntity        :: Int                  -- ^ The entity a System is running on
-  }
+data SceneState = SceneState {
+  resources       :: Map TypeRep Dynamic, -- ^ Dynamic is the Resource itself
+  components      :: Map TypeRep Dynamic, -- ^ Dynamic is 'IOVector (Maybe a)' for each Component a
+  entityCount     :: Int,                 -- ^ Entity count
+  growComponents  :: Scene (),            -- ^ An action for growing all of the component vectors
+  clearEntity     :: Int -> Scene (),     -- ^ An action for setting an index to Nothing in all component vectors
+  reusableIndices :: [Int],               -- ^ Reusable indices in the vectors
+  currentEntity   :: Int                  -- ^ The entity a System is running on
+}
 
 -- | Run a 'Scene' action, provided with an initial state
 runScene :: SceneState -> Scene a -> IO (a, SceneState)
@@ -48,8 +44,8 @@ currentEnt :: Scene Int
 currentEnt = gets currentEntity
 
 -- | Something we can get a value-level type representation from,
--- this class mostly exists so Proxies can also be used if a value
--- of a given component type is not available, or a 'Proxy' is otherwise preferable
+-- this class exists so Proxies can also be used if a value of a
+-- given component type is not available, or a 'Proxy' is otherwise preferable
 class Typeable a => Rep a where
   rep :: a -> TypeRep
 
@@ -84,7 +80,7 @@ class ComponentAccess t where
   has :: t -> Scene Bool                   -- ^ Check if an entity has a component
   remove :: t -> Scene ()                  -- ^ Remove a component from an entity
 
--- Used to establish that the return type of 'get'
+-- used to establish that the return type of 'get'
 -- is gathered from the input type, even though _how_ it is gathered varies
 type family ReturnType t where
   ReturnType (i, a) = ReturnType a
@@ -93,21 +89,14 @@ type family ReturnType t where
 
 -- | Access the current entity's components
 instance (Rep a, Rep (ReturnType a)) => ComponentAccess a where
-  get a = do
-    cur <- currentEnt
-    get (cur, a)
-
-  set a = do
-    cur <- currentEnt
-    set (cur, a)
-
-  has a = do
-    cur <- currentEnt
-    has (cur, a)
-
-  remove a = do
-    cur <- currentEnt
-    remove (cur, a)
+  get a = do cur <- currentEnt
+             get (cur, a)
+  set a = do cur <- currentEnt
+             set (cur, a)
+  has a = do cur <- currentEnt
+             has (cur, a)
+  remove a = do cur <- currentEnt
+                remove (cur, a)
 
 -- | Access a specific entity's components
 instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => ComponentAccess (i, a) where
@@ -121,138 +110,122 @@ instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => Componen
   set (i, c) = do
     componentVec <- getComponentVec
     case componentVec of
-      (Just vec) -> liftIO $ Vector.write vec (fromIntegral i) (Just c)
-      Nothing -> pure ()
+      Nothing -> return ()
+      (Just vec) -> Vector.write vec (fromIntegral i) (Just c)
 
   has (i, _) = do
     componentVec <- getComponentVec @(ReturnType a)
     case componentVec of
       Nothing -> return False
-      (Just vec) -> do val <- liftIO $ Vector.read vec (fromIntegral i)
+      (Just vec) -> do val <- Vector.read vec (fromIntegral i)
                        return $ isJust val
 
   remove (i, _) = do
     componentVec <- getComponentVec @(ReturnType a)
     case componentVec of
       Nothing -> return ()
-      (Just vec) -> do
-        liftIO $ Vector.write vec (fromIntegral i) Nothing
+      (Just vec) -> do liftIO $ Vector.write vec (fromIntegral i) Nothing
 
-class Rep c => SpawnWithComponent c where
-  spawnWithComponent :: c -> Scene ()
 
-instance Rep c => SpawnWithComponent c where
-  spawnWithComponent a = do
-    reuseableIndices <- gets reusableIndices
-    scnState <- State.get
+-- returns an action for expanding some component's vector
+makeVectorGrower :: forall c. Rep c => c -> Scene ()
+makeVectorGrower a = do
+  maybeVec <- getComponentVec @c
+  case maybeVec of
+    Nothing -> do return ()
+    (Just vecToGrow) -> do
+      grownVec <- Vector.grow vecToGrow 1
+      Vector.write grownVec (Vector.length grownVec - 1) Nothing
 
-    chosenIndex <- case reuseableIndices of
-      (i:is) -> do
-        -- this index is no longer re-useable
-        put $ scnState { reusableIndices = is}
-        return i
-      [] -> do
-        ec <- gets entityCount
-        put $ scnState { entityCount = ec + 1 }
+      modify $ \scn ->
+        scn { components = Map.insert (rep a)
+                                      (toDyn grownVec)
+                                      (components scn) }
 
-        -- grow all of the existing component vectors to fit the new entity
-        grow <- gets growComponents
-        grow
-        return ec
-
-    -- per component
-    maybeComponentVec <- getComponentVec @c
-    componentVec <- case maybeComponentVec of
-      (Just vec) -> return vec
-      Nothing -> do
-        slots <- gets entityCount
-        vec <- liftIO $ Vector.replicate slots (Nothing :: Maybe a)
-
-        modify $ \scnState -> scnState
-          { components = Map.insert (rep a)
-                                    (toDyn vec)
-                                    (components scnState) }
-
-        modify $ \scnState -> scnState
-          { growComponents = growComponents scnState >>
-              do maybeVec <- getComponentVec @c
-                 case maybeVec of
-                   Nothing -> return ()
-                   (Just vecToGrow) -> do
-                      grownVec <- liftIO $ Vector.grow vecToGrow 1
-                      liftIO $ Vector.write grownVec (Vector.length grownVec - 1) Nothing
-
-                      liftIO $ putStrLn $ "grew vector for "
-                        ++ show (typeRep (Proxy @c)) ++ " to length " ++ show (Vector.length grownVec)
-
-                      modify $ \scnState ->
-                        scnState { components = Map.insert (rep a)
-                                                           (toDyn grownVec)
-                                                           (components scnState) }
-                      return () }
-
-        return vec
-
-    Vector.write componentVec chosenIndex (Just a)
-
+-- takes an entity index and returns an action
+-- that adds some component to that entity
 type ComponentAdder = (Int -> Scene ())
 
-class Typeable c => MakeComponentAdder c where
-  makeComponentAdder :: c -> ComponentAdder
+makeComponentAdder :: forall c. Rep c => c -> ComponentAdder
+makeComponentAdder a index = do
+  maybeComponentVec <- getComponentVec @c
 
-instance Typeable c => MakeComponentAdder c where
-  makeComponentAdder a index = do
-      maybeComponentVec <- getComponentVec @c
-      componentVec <- case maybeComponentVec of
-        (Just vec) -> return vec
-        Nothing -> do
-          slots <- gets entityCount
-          vec <- liftIO $ Vector.replicate slots (Nothing :: Maybe a)
+  componentVec <- case maybeComponentVec of
+    (Just vec) -> return vec
+    Nothing -> do
+      slots <- gets entityCount
+      vec <- Vector.replicate slots (Nothing :: Maybe a)
 
-          modify $ \scnState -> scnState
-            { components = Map.insert (rep a)
-                                      (toDyn vec)
-                                      (components scnState) }
+      modify $ \scnState -> scnState
+        { components = Map.insert (rep a)
+                                  (toDyn vec)
+                                  (components scnState) }
 
-          modify $ \scnState -> scnState
-            { growComponents = growComponents scnState >>
-                do maybeVec <- getComponentVec @c
-                   case maybeVec of
-                    Nothing -> return ()
-                    (Just vecToGrow) -> do
-                        grownVec <- liftIO $ Vector.grow vecToGrow 1
-                        liftIO $ Vector.write grownVec (Vector.length grownVec - 1) Nothing
+      -- modify the growComponents action to be itself joined with
+      -- a new action that grows the new vector
+      modify $ \scnState -> scnState
+        { growComponents = growComponents scnState >> makeVectorGrower a}
 
-                        liftIO $ putStrLn $ "grew vector for "
-                          ++ show (typeRep (Proxy @c)) ++ " to length " ++ show (Vector.length grownVec)
+      return vec
 
-                        modify $ \scnState ->
-                          scnState { components = Map.insert (rep a)
-                                                             (toDyn grownVec)
-                                                             (components scnState) }
-                        return () }
+  Vector.write componentVec index (Just a)
 
-          return vec
+spawn' :: [ComponentAdder] -> Scene ()
+spawn' adders = do
+  reuseableIndices <- gets reusableIndices
+  scnState <- State.get
 
-      Vector.write componentVec index (Just a)
+  chosenIndex <- case reuseableIndices of
+    (i:is) -> do
+      -- this index is no longer re-useable
+      put $ scnState { reusableIndices = is}
+      return i
+    [] -> do
+      ec <- gets entityCount
+      put $ scnState { entityCount = ec + 1 }
 
-class Spawn f r where
-  spawn :: f -> r
+      -- grow all of the existing component vectors to fit the new entity
+      gets growComponents >>= (>> return ec)
+
+  mapM_ ($ chosenIndex) adders
+
+class Spawn a r where
+  -- | Spawns a new entity, takes any number of arguments,
+  -- each of which is a component to add to the new entity
+  spawn :: a -> r
 
 instance (a ~ ()) => Spawn [ComponentAdder] (Scene a) where
-  spawn x = do
-    liftIO $ putStrLn "Calculating"
-    liftIO $ putStrLn $ "with " ++ (show (length x)) ++ " arguments"
+  spawn = spawn'
 
+-- | Only one argument
 instance {-# OVERLAPS #-} (a ~ (), Typeable b) => Spawn b (Scene a) where
-  spawn x = do
-    liftIO $ putStrLn "One arg"
+  spawn a = spawn' [makeComponentAdder a]
 
+-- | Recursive case
 instance (Typeable a, Spawn [ComponentAdder] r) => Spawn [ComponentAdder] (a -> r) where
   spawn x y = spawn (x ++ [makeComponentAdder y])
 
+-- | The next type is the same
 instance {-# OVERLAPPABLE #-} (Typeable a, Spawn [ComponentAdder] r) => Spawn a (a -> r) where
   spawn x y = spawn $ makeComponentAdder x : [makeComponentAdder y]
 
+-- | The next type is different
 instance {-# OVERLAPPABLE #-} (Typeable a, Typeable b, Spawn [ComponentAdder] r) => Spawn a (b -> r) where
   spawn x y = spawn $ makeComponentAdder x : [makeComponentAdder y]
+
+class Despawn e where
+  -- | Despawn an entity
+  despawn :: e
+
+-- | Despawn the current entity
+instance {-# OVERLAPS #-} a ~ () => Despawn (Scene a) where
+  despawn = do
+    liftIO $ putStrLn "hi"
+
+-- | Despawn a specific entity
+instance {-# OVERLAPPABLE #-} a ~ () => Despawn (Int -> Scene a) where
+  despawn x = do
+    liftIO $ putStrLn $ "hi it was " ++ show x
+
+-- despawn' :: Int -> Scene ()
+-- despawn 
