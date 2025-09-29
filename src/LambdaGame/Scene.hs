@@ -142,6 +142,14 @@ makeVectorGrower a = do
                                       (toDyn grownVec)
                                       (components scn) }
 
+-- returns a function for setting an index in a component vector to Nothing
+makeClearFunction :: forall c. Rep c => c -> Int -> Scene ()
+makeClearFunction _ i = do
+  maybeVec <- getComponentVec @c
+  case maybeVec of
+    (Just vec) -> Vector.write vec i Nothing
+    Nothing -> return ()
+
 -- takes an entity index and returns an action
 -- that adds some component to that entity
 type ComponentAdder = (Int -> Scene ())
@@ -165,6 +173,12 @@ makeComponentAdder a index = do
       -- a new action that grows the new vector
       modify $ \scnState -> scnState
         { growComponents = growComponents scnState >> makeVectorGrower a}
+      
+      clearEntityFn <- gets clearEntity
+      modify $ \scnState -> scnState
+        { clearEntity =
+            \i -> do clearEntityFn i
+                     makeClearFunction a i}
 
       return vec
 
@@ -220,12 +234,15 @@ class Despawn e where
 -- | Despawn the current entity
 instance {-# OVERLAPS #-} a ~ () => Despawn (Scene a) where
   despawn = do
-    liftIO $ putStrLn "hi"
+    cur <- currentEnt
+    despawn' cur
 
 -- | Despawn a specific entity
 instance {-# OVERLAPPABLE #-} a ~ () => Despawn (Int -> Scene a) where
   despawn x = do
-    liftIO $ putStrLn $ "hi it was " ++ show x
+    despawn' x
 
--- despawn' :: Int -> Scene ()
--- despawn 
+despawn' :: Int -> Scene ()
+despawn' i = do
+  clearFn <- gets clearEntity
+  clearFn i

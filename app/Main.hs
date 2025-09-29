@@ -11,15 +11,11 @@ import Data.Typeable (Typeable, cast)
 import LambdaGame
 import qualified Data.Map as Map
 import Data.Data (Proxy(..))
-import Data.Maybe (fromMaybe)
-import Data.Data (typeOf)
 
 data Position = Position Int Int deriving Show
 
 testAction :: Scene ()
 testAction = do
-  despawn (2 :: Int)
-
   spawn (32 :: Int)
         (Position 2 3)
         "Hello i am one"
@@ -32,7 +28,7 @@ testAction = do
         "Hello i am three"
         (Position 6 4)
 
-  val <- get (2, Proxy @[Char])
+  val <- get (0, Proxy @Int)
 
   case val of
     Nothing -> liftIO $ putStrLn "was nothing"
@@ -44,6 +40,7 @@ initialState = LambdaGame.SceneState
     components = Map.empty,
     entityCount = 0,
     growComponents = return (),
+    clearEntity = \i -> return (),
     reusableIndices = [],
     currentEntity = 0
   }
