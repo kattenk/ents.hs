@@ -1,39 +1,40 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeFamilies, ConstraintKinds #-}
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Main (main) where
 import Data.Char (toUpper)
 import Debug.Trace (trace)
-import Data.Typeable (Typeable, cast)
+import Data.Typeable (Typeable, cast, typeRep)
 import LambdaGame
 import qualified Data.Map as Map
 import Data.Data (Proxy(..))
 
-data Position = Position Int Int deriving Show
+data Position = Position Int Int
+
+testSystem :: Int -> String -> Int -> Int -> Scene Int
+testSystem x y z f = do
+  liftIO $ putStrLn "Yay! :D"
+  return 2500
 
 testAction :: Scene ()
 testAction = do
-  spawn (32 :: Int)
+  spawn (76 :: Int)
         (Position 2 3)
         "Hello i am one"
-  
+
   spawn (32 :: Int)
-        "Hello i am two"
-        (Position 6 4)
-  
+
   spawn (32 :: Int)
         "Hello i am three"
         (Position 6 4)
 
-  val <- get (0, Proxy @Int)
+  fil <- ($ 2) $ getFilter testSystem
 
-  case val of
-    Nothing -> liftIO $ putStrLn "was nothing"
-    (Just v) -> liftIO $ putStrLn $ "it is " ++ show v
+  runSystem testSystem
+  liftIO $ putStrLn $ "the result is " ++ show fil
 
+  return ()
 
 initialState = LambdaGame.SceneState
   { resources = Map.empty,

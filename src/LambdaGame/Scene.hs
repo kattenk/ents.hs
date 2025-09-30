@@ -1,10 +1,11 @@
 {-# LANGUAGE ScopedTypeVariables, FlexibleInstances, TypeFamilies, TypeOperators,
              TypeApplications, UndecidableInstances, FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
   currentEnt, setResource, getResource,
-  ComponentAccess(..),
+  ComponentAccess(..), ReturnType,
   Spawn(..), Despawn(..)
 ) where
 
@@ -18,6 +19,8 @@ import qualified Control.Monad.State.Strict as State
 import Data.Vector.Mutable (IOVector)
 import qualified Data.Vector.Mutable as Vector
 import Data.Maybe (isJust)
+
+-- TODO: Reuseable indices
 
 -- data Ent = Ent { index :: Int, generation :: Int }
 
@@ -49,10 +52,10 @@ currentEnt = gets currentEntity
 class Typeable a => Rep a where
   rep :: a -> TypeRep
 
-instance Typeable a => Rep a where
+instance {-# Incoherent #-} Typeable a => Rep a where
   rep = typeOf
 
-instance {-# OVERLAPPING  #-} Typeable a => Rep (Proxy a) where
+instance {-# Overlapping #-} Typeable a => Rep (Proxy a) where
   rep _ = typeRep (Proxy @a)
 
 -- | Sets a Resource
@@ -89,14 +92,18 @@ type family ReturnType t where
 
 -- | Access the current entity's components
 instance (Rep a, Rep (ReturnType a)) => ComponentAccess a where
-  get a = do cur <- currentEnt
-             get (cur, a)
-  set a = do cur <- currentEnt
-             set (cur, a)
-  has a = do cur <- currentEnt
-             has (cur, a)
-  remove a = do cur <- currentEnt
-                remove (cur, a)
+  get a = do
+    cur <- currentEnt
+    get (cur, a)
+  set a = do
+    cur <- currentEnt
+    set (cur, a)
+  has a = do
+    cur <- currentEnt
+    has (cur, a)
+  remove a = do
+    cur <- currentEnt
+    remove (cur, a)
 
 -- | Access a specific entity's components
 instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => ComponentAccess (i, a) where
@@ -211,19 +218,19 @@ class Spawn a r where
 instance (a ~ ()) => Spawn [ComponentAdder] (Scene a) where
   spawn = spawn'
 
--- | Only one argument
+-- only one argument
 instance {-# OVERLAPS #-} (a ~ (), Typeable b) => Spawn b (Scene a) where
   spawn a = spawn' [makeComponentAdder a]
 
--- | Recursive case
+-- recursive case
 instance (Typeable a, Spawn [ComponentAdder] r) => Spawn [ComponentAdder] (a -> r) where
   spawn x y = spawn (x ++ [makeComponentAdder y])
 
--- | The next type is the same
+-- the next type is the same
 instance {-# OVERLAPPABLE #-} (Typeable a, Spawn [ComponentAdder] r) => Spawn a (a -> r) where
   spawn x y = spawn $ makeComponentAdder x : [makeComponentAdder y]
 
--- | The next type is different
+-- the next type is different
 instance {-# OVERLAPPABLE #-} (Typeable a, Typeable b, Spawn [ComponentAdder] r) => Spawn a (b -> r) where
   spawn x y = spawn $ makeComponentAdder x : [makeComponentAdder y]
 
