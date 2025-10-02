@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main (main) where
 import Data.Char (toUpper)
@@ -12,10 +13,11 @@ import Data.Data (Proxy(..))
 
 data Position = Position Int Int
 
-testSystem :: Int -> String -> Int -> Int -> Scene Int
-testSystem x y z f = do
-  liftIO $ putStrLn "Yay! :D"
-  return 2500
+testSystem :: Int -> String -> Scene Int
+testSystem int string = do
+  liftIO $ putStrLn $ "The int is " ++ show int ++ ", the string is " ++ string
+  set "New string"
+  return 5360115
 
 testAction :: Scene ()
 testAction = do
@@ -24,6 +26,7 @@ testAction = do
         "Hello i am one"
 
   spawn (32 :: Int)
+        "Blah"
 
   spawn (32 :: Int)
         "Hello i am three"
@@ -31,7 +34,14 @@ testAction = do
 
   fil <- ($ 2) $ getFilter testSystem
 
-  runSystem testSystem
+  system testSystem
+  
+  val <- get (1, Proxy @[Char])
+
+  case val of
+    Nothing -> liftIO $ putStrLn "was nothing"
+    (Just v) -> liftIO $ putStrLn $ "it is " ++ show v
+
   liftIO $ putStrLn $ "the result is " ++ show fil
 
   return ()

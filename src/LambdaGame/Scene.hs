@@ -52,10 +52,10 @@ currentEnt = gets currentEntity
 class Typeable a => Rep a where
   rep :: a -> TypeRep
 
-instance {-# Incoherent #-} Typeable a => Rep a where
+instance {-# INCOHERENT #-} Typeable a => Rep a where
   rep = typeOf
 
-instance {-# Overlapping #-} Typeable a => Rep (Proxy a) where
+instance {-# OVERLAPPING #-} Typeable a => Rep (Proxy a) where
   rep _ = typeRep (Proxy @a)
 
 -- | Sets a Resource
