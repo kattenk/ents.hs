@@ -11,6 +11,7 @@ import LambdaGame.Scene
     ( Scene,
       ComponentAccess(..),
       ReturnType,
+      isResource,
       SceneState(entityCount, currentEntity),
       currentEnt )
 
@@ -56,9 +57,9 @@ class SystemFilter f where
     getFilter f i = do
         results <- sequence filters
         return $ and results
-            where filters = map ($ i) (paramFilters f)
+            where filters = map ($ i) (map fst (paramFilters f))
 
-    paramFilters :: f -> [Int -> Scene Bool]
+    paramFilters :: f -> [(Int -> Scene Bool, Scene Bool)]
 
 -- | Internal class for running systems, runs a system for the current entity
 class SystemRunner f where
@@ -92,18 +93,30 @@ instance {-# OVERLAPPING #-} (Typeable a, Typeable (ReturnType a)) => SystemResu
         res <- a
         set res
 
-instance {-# OVERLAPPING #-} (SystemParam a) =>
+instance {-# OVERLAPPING #-} (SystemParam a, Typeable a) =>
     SystemFilter (a -> b) where
-    paramFilters _ = [shouldRun @a]
+    paramFilters _ = [(shouldRun @a, isResource (Proxy @a))]
 
-instance {-# OVERLAPPING #-} (SystemParam a, SystemParam b) =>
+instance {-# OVERLAPPING #-}
+    (SystemParam a, SystemParam b,
+    Typeable a, Typeable b) =>
     SystemFilter (a -> b -> c) where
-    paramFilters _ = [shouldRun @a, shouldRun @b]
+    paramFilters _ = [(shouldRun @a, isResource (Proxy @a)),
+                      (shouldRun @b, isResource (Proxy @b))]
 
-instance {-# OVERLAPPING #-} (SystemParam a, SystemParam b, SystemParam c) =>
+instance {-# OVERLAPPING #-}
+    (SystemParam a, SystemParam b, SystemParam c,
+    Typeable a, Typeable b, Typeable c) =>
     SystemFilter (a -> b -> c -> d) where
-    paramFilters _ = [shouldRun @a, shouldRun @b, shouldRun @c]
+    paramFilters _ = [(shouldRun @a, isResource (Proxy @a)),
+                      (shouldRun @b, isResource (Proxy @b)),
+                      (shouldRun @c, isResource (Proxy @c))]
 
-instance {-# OVERLAPPING #-} (SystemParam a, SystemParam b, SystemParam c, SystemParam d) =>
+instance {-# OVERLAPPING #-}
+    (SystemParam a, SystemParam b, SystemParam c, SystemParam d,
+    Typeable a, Typeable b, Typeable c, Typeable d) =>
     SystemFilter (a -> b -> c -> d -> e) where
-    paramFilters _ = [shouldRun @a, shouldRun @b, shouldRun @c, shouldRun @d]
+    paramFilters _ = [(shouldRun @a, isResource (Proxy @a)),
+                      (shouldRun @b, isResource (Proxy @b)),
+                      (shouldRun @c, isResource (Proxy @c)),
+                      (shouldRun @d, isResource (Proxy @d))]

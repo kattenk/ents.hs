@@ -1,10 +1,9 @@
 {-# LANGUAGE ScopedTypeVariables, FlexibleInstances, TypeFamilies, TypeOperators,
              TypeApplications, UndecidableInstances, FlexibleContexts, MultiParamTypeClasses #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
 
 module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
-  currentEnt, setResource, getResource,
+  currentEnt, resource, isResource,
   ComponentAccess(..), ReturnType,
   Spawn(..), Despawn(..)
 ) where
@@ -59,16 +58,20 @@ instance {-# OVERLAPPING #-} Typeable a => Rep (Proxy a) where
   rep _ = typeRep (Proxy @a)
 
 -- | Sets a Resource
-setResource :: Rep r => r -> Scene ()
-setResource r =
+resource :: Typeable r => r -> Scene ()
+resource r =
   modify $ \ecs -> ecs { resources = Map.insert (rep r) (toDyn r) (resources ecs) }
 
--- | Gets a Resource based on what you expect from it
--- e.g to get 'Time' you could do 'time <- getResource :: Scene (Maybe Time)'
+-- | Internal function for fetching a resource
 getResource :: forall r. Rep r => Scene (Maybe r)
 getResource = do
   storage <- gets resources
   return $ Map.lookup (rep (Proxy @r)) storage >>= fromDynamic
+
+isResource :: forall a. Typeable a => Proxy a -> Scene Bool
+isResource _ = do
+  res <- getResource @a
+  return $ isJust res
 
 -- | Internal-only function for retrieving a component vector from storage,
 -- for reading or writing to it.
@@ -110,22 +113,24 @@ instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => Componen
   get (i, _) = do
     componentVec <- getComponentVec
 
-    maybe (return Nothing)
+    maybe (getResource @(ReturnType a))
           (`Vector.read` fromIntegral i)
           componentVec
 
   set (i, c) = do
-    componentVec <- getComponentVec
-    case componentVec of
-      Nothing -> return ()
-      (Just vec) -> Vector.write vec (fromIntegral i) (Just c)
+    isRes <- isResource (Proxy @a)
+    if isRes then do
+      resource c
+    else do
+      componentVec <- getComponentVec
+
+      case componentVec of
+        Nothing -> return ()
+        (Just vec) -> Vector.write vec (fromIntegral i) (Just c)
 
   has (i, _) = do
-    componentVec <- getComponentVec @(ReturnType a)
-    case componentVec of
-      Nothing -> return False
-      (Just vec) -> do val <- Vector.read vec (fromIntegral i)
-                       return $ isJust val
+    component <- get (Proxy @a)
+    return $ isJust component
 
   remove (i, _) = do
     componentVec <- getComponentVec @(ReturnType a)
