@@ -2,6 +2,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Use newtype instead of data" #-}
 
 module Main (main) where
 import Data.Char (toUpper)
@@ -12,15 +14,24 @@ import qualified Data.Map as Map
 import Data.Data (Proxy(..))
 
 data Position = Position Int Int
+data MyResource = MyResource String deriving Show
 
-testSystem :: Int -> String -> Scene Int
-testSystem int string = do
-  liftIO $ putStrLn $ "The int is " ++ show int ++ ", the string is " ++ string
+testSystem :: Scene Int
+testSystem = do
+  -- liftIO $ putStrLn $ "The int is " ++ show int ++ ", the string is " ++ string ++ ", resource is " ++ show r
   set "New string"
   return 5360115
 
+-- testSystem :: MyResource -> Scene Int
+-- testSystem r = do
+--   liftIO $ putStrLn $ ", resource is " ++ show r
+--   set "New string"
+--   return 5360115
+
 testAction :: Scene ()
 testAction = do
+  resource $ MyResource "Hey"
+
   spawn (76 :: Int)
         (Position 2 3)
         "Hello i am one"
@@ -32,8 +43,6 @@ testAction = do
         "Hello i am three"
         (Position 6 4)
 
-  fil <- ($ 2) $ getFilter testSystem
-
   system testSystem
   
   val <- get (1, Proxy @[Char])
@@ -41,8 +50,6 @@ testAction = do
   case val of
     Nothing -> liftIO $ putStrLn "was nothing"
     (Just v) -> liftIO $ putStrLn $ "it is " ++ show v
-
-  liftIO $ putStrLn $ "the result is " ++ show fil
 
   return ()
 

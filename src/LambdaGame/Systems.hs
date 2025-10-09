@@ -17,10 +17,14 @@ system :: (SystemFilter f, SystemRunner f) => f -> Scene ()
 system f = do
     entities <- gets entityCount
     entitiesToRunOn <- filterM (getFilter f) [0 .. entities - 1]
-    
-    forM_ entitiesToRunOn $ \e -> do
-        modify $ \s -> s { currentEntity = e }
+
+    liftIO $ putStrLn $ "Entities to run on: " ++ show entitiesToRunOn
+    if null entitiesToRunOn then do
         runSystem f
+    else do
+        forM_ entitiesToRunOn $ \e -> do
+            modify $ \s -> s { currentEntity = e }
+            runSystem f
 
 class Typeable p => SystemParam p where
     -- | Should a system with this parameter run on this entity?
@@ -43,14 +47,23 @@ instance Typeable a => SystemParam (Maybe a) where
         component <- get (e, Proxy @a)
         return (Just component)
 
+-- where filters = map (`fst` i) (paramFilters f)
+
+filterFalse :: [(a, Scene Bool)] -> Scene [a]
+filterFalse = fmap (map fst) . filterM (fmap not . snd)
+
 class SystemFilter f where
     -- | Takes a system function and returns a "filter" function,
     -- used to determine if a system should run on an entity
     getFilter :: f -> (Int -> Scene Bool)
     getFilter f i = do
+        filteredFilters <- filterFalse (paramFilters f)
+        let filters = map ($ i) filteredFilters
         results <- sequence filters
-        return $ and results
-            where filters = map ($ i) (map fst (paramFilters f))
+        if null results then
+            return False
+        else
+            return $ and results
 
     paramFilters :: f -> [(Int -> Scene Bool, Scene Bool)]
 
@@ -85,6 +98,10 @@ instance {-# OVERLAPPING #-} (Typeable a, Typeable (ReturnType a)) => SystemResu
     handleResult a = do
         res <- a
         set res
+
+instance {-# OVERLAPPING #-} Typeable a =>
+    SystemFilter a where
+    paramFilters _ = []
 
 instance {-# OVERLAPPING #-} (SystemParam a, Typeable a) =>
     SystemFilter (a -> b) where
