@@ -3,11 +3,17 @@
 
 module LambdaGame.Systems (
     SystemFilter(..),
+    SystemParam(..),
     SystemRunner(..),
     system
 ) where
-import LambdaGame.Scene ( Scene, ComponentAccess(..), ReturnType, isResource,
-                          SceneState(entityCount, currentEntity), currentEnt )
+import LambdaGame.Scene
+    ( Scene,
+      ComponentAccess(..),
+      ReturnType,
+      SceneState(entityCount, currentEntity),
+      currentEnt, isResource )
+
 import Data.Data (Proxy(..))
 import Data.Typeable (Typeable)
 import Control.Monad.State.Strict hiding (get)
@@ -15,13 +21,13 @@ import Control.Monad.State.Strict hiding (get)
 -- | Action for running a System
 system :: (SystemFilter f, SystemRunner f) => f -> Scene ()
 system f = do
-    entities <- gets entityCount
-    entitiesToRunOn <- filterM (getFilter f) [0 .. entities - 1]
-
-    liftIO $ putStrLn $ "Entities to run on: " ++ show entitiesToRunOn
-    if null entitiesToRunOn then do
+    global <- isGlobal f
+    if global then do
         runSystem f
     else do
+        entities <- gets entityCount
+        entitiesToRunOn <- filterM (getFilter f) [0 .. entities - 1]
+
         forM_ entitiesToRunOn $ \e -> do
             modify $ \s -> s { currentEntity = e }
             runSystem f
@@ -47,25 +53,17 @@ instance Typeable a => SystemParam (Maybe a) where
         component <- get (e, Proxy @a)
         return (Just component)
 
--- where filters = map (`fst` i) (paramFilters f)
-
-filterFalse :: [(a, Scene Bool)] -> Scene [a]
-filterFalse = fmap (map fst) . filterM (fmap not . snd)
-
 class SystemFilter f where
     -- | Takes a system function and returns a "filter" function,
     -- used to determine if a system should run on an entity
     getFilter :: f -> (Int -> Scene Bool)
     getFilter f i = do
-        filteredFilters <- filterFalse (paramFilters f)
-        let filters = map ($ i) filteredFilters
         results <- sequence filters
-        if null results then
-            return False
-        else
-            return $ and results
+        return $ and results
+            where filters = map ($ i) (paramFilters f)
 
-    paramFilters :: f -> [(Int -> Scene Bool, Scene Bool)]
+    paramFilters :: f -> [Int -> Scene Bool]
+    isGlobal :: f -> Scene Bool
 
 -- | Internal class for running systems, runs a system for the current entity
 class SystemRunner f where
@@ -86,7 +84,6 @@ instance SystemResult a => SystemRunner a where
     runSystem a = do
         handleResult a
 
-
 class SystemResult r where
     handleResult :: r -> Scene ()
 
@@ -99,31 +96,38 @@ instance {-# OVERLAPPING #-} (Typeable a, Typeable (ReturnType a)) => SystemResu
         res <- a
         set res
 
-instance {-# OVERLAPPING #-} Typeable a =>
-    SystemFilter a where
+allResources :: [Scene Bool] -> Scene Bool
+allResources resCheckers = do
+    results <- sequence resCheckers
+    return $ and results
+
+instance {-# OVERLAPPING #-} (SystemResult a) =>
+    SystemFilter (Scene a) where
     paramFilters _ = []
+    isGlobal _ = return True
 
-instance {-# OVERLAPPING #-} (SystemParam a, Typeable a) =>
+instance {-# OVERLAPPING #-} (SystemParam a) =>
     SystemFilter (a -> b) where
-    paramFilters _ = [(shouldRun @a, isResource (Proxy @a))]
+    paramFilters _ = [shouldRun @a]
+    isGlobal _ = allResources [isResource (Proxy @a)]
 
-instance {-# OVERLAPPING #-}
-    (SystemParam a, SystemParam b) =>
+instance {-# OVERLAPPING #-} (SystemParam a, SystemParam b) =>
     SystemFilter (a -> b -> c) where
-    paramFilters _ = [(shouldRun @a, isResource (Proxy @a)),
-                      (shouldRun @b, isResource (Proxy @b))]
+    paramFilters _ = [shouldRun @a, shouldRun @b]
+    isGlobal _ = allResources [isResource (Proxy @a),
+                               isResource (Proxy @b)]
 
-instance {-# OVERLAPPING #-}
-    (SystemParam a, SystemParam b, SystemParam c) =>
+instance {-# OVERLAPPING #-} (SystemParam a, SystemParam b, SystemParam c) =>
     SystemFilter (a -> b -> c -> d) where
-    paramFilters _ = [(shouldRun @a, isResource (Proxy @a)),
-                      (shouldRun @b, isResource (Proxy @b)),
-                      (shouldRun @c, isResource (Proxy @c))]
+    paramFilters _ = [shouldRun @a, shouldRun @b, shouldRun @c]
+    isGlobal _ = allResources [isResource (Proxy @a),
+                               isResource (Proxy @b),
+                               isResource (Proxy @c)]
 
-instance {-# OVERLAPPING #-}
-    (SystemParam a, SystemParam b, SystemParam c, SystemParam d) =>
+instance {-# OVERLAPPING #-} (SystemParam a, SystemParam b, SystemParam c, SystemParam d) =>
     SystemFilter (a -> b -> c -> d -> e) where
-    paramFilters _ = [(shouldRun @a, isResource (Proxy @a)),
-                      (shouldRun @b, isResource (Proxy @b)),
-                      (shouldRun @c, isResource (Proxy @c)),
-                      (shouldRun @d, isResource (Proxy @d))]
+    paramFilters _ = [shouldRun @a, shouldRun @b, shouldRun @c, shouldRun @d]
+    isGlobal _ = allResources [isResource (Proxy @a),
+                               isResource (Proxy @b),
+                               isResource (Proxy @c),
+                               isResource (Proxy @d)]
