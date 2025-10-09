@@ -71,7 +71,8 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:   base ^>=4.21.0.0,
+    build-depends:   time ^>=1.14,
+                     base ^>=4.21.0.0,
                      mtl ^>=2.2.2,
                      vector ^>=0.13.2.0,
                      containers ^>=0.6.7,

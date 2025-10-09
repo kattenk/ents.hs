@@ -1,29 +1,19 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE TypeApplications #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Use newtype instead of data" #-}
-
 module Main (main) where
-import Data.Char (toUpper)
-import Debug.Trace (trace)
-import Data.Typeable (Typeable, cast, typeRep)
 import LambdaGame
-import Data.Data (Proxy(..))
+import Control.Concurrent (threadDelay)
 
-data Counter = Counter { count :: Int }
+newtype Counter = Counter {count :: Int}
 
 countUp :: Counter -> Counter
 countUp c =
   Counter { count = count c + 1}
 
-stopAfter :: Counter -> ExitGame
+stopAfter :: Counter -> GameLoop
 stopAfter c =
   if count c >= 10 then
-    ExitGame True
+    GameLoop { loopRate = 60, exit = True }
   else
-    ExitGame False
+    GameLoop { loopRate = 60, exit = False }
 
 printCount :: Counter -> Scene ()
 printCount c = do
