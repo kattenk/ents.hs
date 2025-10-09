@@ -10,63 +10,30 @@ import Data.Char (toUpper)
 import Debug.Trace (trace)
 import Data.Typeable (Typeable, cast, typeRep)
 import LambdaGame
-import qualified Data.Map as Map
 import Data.Data (Proxy(..))
 
-data Position = Position Int Int
-data MyResource = MyResource String deriving Show
+data Counter = Counter { count :: Int }
 
-testSystem :: Int -> String -> MyResource -> Scene Int
-testSystem int string res = do
-  liftIO $ putStrLn $ "The int is " ++ show int ++ ", the string is " ++ string ++ ", res is " ++ show res
-  set "New string"
-  return 5360115
+countUp :: Counter -> Counter
+countUp c =
+  Counter { count = count c + 1}
 
-setupRes :: Scene MyResource
-setupRes = return $ MyResource "Hey"
+stopAfter :: Counter -> ExitGame
+stopAfter c =
+  if count c >= 10 then
+    ExitGame True
+  else
+    ExitGame False
 
--- testSystem :: MyResource -> Scene Int
--- testSystem r = do
---   liftIO $ putStrLn $ ", resource is " ++ show r
---   set "New string"
---   return 5360115
-
-testAction :: Scene ()
-testAction = do
-  resource $ MyResource "Hi"
-  system setupRes
-
-  spawn (76 :: Int)
-        (Position 2 3)
-        "Hello i am one"
-
-  spawn "Blah"
-
-  spawn (32 :: Int)
-        "Hello i am three"
-        (Position 6 4)
-
-  system testSystem
-  
-  val <- get (1, Proxy @[Char])
-
-  case val of
-    Nothing -> liftIO $ putStrLn "was nothing"
-    (Just v) -> liftIO $ putStrLn $ "it is " ++ show v
-
-  return ()
-
-initialState = LambdaGame.SceneState
-  { resources = Map.empty,
-    components = Map.empty,
-    entityCount = 0,
-    growComponents = return (),
-    clearEntity = \i -> return (),
-    reusableIndices = [],
-    currentEntity = 0
-  }
+printCount :: Counter -> Scene ()
+printCount c = do
+  liftIO $ putStrLn $ "the count is " ++ show (count c) ++ ".."
 
 main :: IO ()
 main = do
-  runScene initialState testAction
-  return ()
+  runGame $ do
+    spawn (Counter 0)
+    gameLoop $ do
+      system countUp
+      system printCount
+      system stopAfter

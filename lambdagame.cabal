@@ -61,7 +61,8 @@ library
     -- Modules exported by the library.
     exposed-modules:  LambdaGame,
                       LambdaGame.Scene,
-                      LambdaGame.Systems
+                      LambdaGame.Systems,
+                      LambdaGame.Game
 
     -- Modules included in this rary but not exported.
     -- other-modules:
