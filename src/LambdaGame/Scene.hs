@@ -113,24 +113,22 @@ instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => Componen
   get (i, _) = do
     componentVec <- getComponentVec
 
-    maybe (getResource @(ReturnType a))
+    maybe (return Nothing)
           (`Vector.read` fromIntegral i)
           componentVec
 
   set (i, c) = do
-    isRes <- isResource (Proxy @a)
-    if isRes then do
-      resource c
-    else do
-      componentVec <- getComponentVec
-
-      case componentVec of
-        Nothing -> return ()
-        (Just vec) -> Vector.write vec (fromIntegral i) (Just c)
+    componentVec <- getComponentVec
+    case componentVec of
+      Nothing -> return ()
+      (Just vec) -> Vector.write vec (fromIntegral i) (Just c)
 
   has (i, _) = do
-    component <- get (Proxy @a)
-    return $ isJust component
+    componentVec <- getComponentVec @(ReturnType a)
+    case componentVec of
+      Nothing -> return False
+      (Just vec) -> do val <- Vector.read vec (fromIntegral i)
+                       return $ isJust val
 
   remove (i, _) = do
     componentVec <- getComponentVec @(ReturnType a)
