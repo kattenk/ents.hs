@@ -46,8 +46,6 @@ testAction = do
         "Hello i am three"
         (Position 6 4)
 
-  fil <- ($ 2) $ getFilter testSystem
-
   system testSystem
   
   val <- get (1, Proxy @[Char])
@@ -55,8 +53,6 @@ testAction = do
   case val of
     Nothing -> liftIO $ putStrLn "was nothing"
     (Just v) -> liftIO $ putStrLn $ "it is " ++ show v
-
-  liftIO $ putStrLn $ "the result is " ++ show fil
 
   return ()
 

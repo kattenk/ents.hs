@@ -190,6 +190,7 @@ makeComponentAdder a index = do
       modify $ \scnState -> scnState
         { growComponents = growComponents scnState >> makeVectorGrower a}
       
+      -- similar thing with clearing
       clearEntityFn <- gets clearEntity
       modify $ \scnState -> scnState
         { clearEntity =
@@ -247,6 +248,11 @@ class Despawn e where
   -- | Despawn an entity
   despawn :: e
 
+despawn' :: Int -> Scene ()
+despawn' i = do
+  clearFn <- gets clearEntity
+  clearFn i
+
 -- | Despawn the current entity
 instance {-# OVERLAPS #-} a ~ () => Despawn (Scene a) where
   despawn = do
@@ -257,8 +263,3 @@ instance {-# OVERLAPS #-} a ~ () => Despawn (Scene a) where
 instance {-# OVERLAPPABLE #-} a ~ () => Despawn (Int -> Scene a) where
   despawn x = do
     despawn' x
-
-despawn' :: Int -> Scene ()
-despawn' i = do
-  clearFn <- gets clearEntity
-  clearFn i
