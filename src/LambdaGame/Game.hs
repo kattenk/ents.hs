@@ -25,9 +25,10 @@ initialState = SceneState
 defaultWindow :: Window
 defaultWindow = Window {
   title = "Game",
-  size = (640, 480),
-  fps = 500,
+  size = (1400, 1200),
+  fps = 60,
   backend = raylibBackend,
+  escapeToExit = True,
   exit = False
 }
 
@@ -47,7 +48,7 @@ gameLoop userLoop = do
   win <- getWindow
   startBackend (backend win)
 
-  loop where
+  loop >> stopBackend (backend win) where
     loop = do
       win <- getWindow
       updateBackend (backend win)
