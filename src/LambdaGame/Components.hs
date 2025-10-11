@@ -3,7 +3,10 @@
 
 module LambdaGame.Components (
   Window(..), Backend(..), Time,
-  Position(Position, Pos), Size(..), Color(..), Text(..)) where
+  Position(Position, Pos), Size(..),
+  Color(..), Text(..), Sprite(..)
+) where
+
 import LambdaGame.Scene (Scene)
 import Linear.V3
 
@@ -16,7 +19,7 @@ data Backend = Backend {
 data Window = Window {
   title :: String,      -- ^ Window title
   size :: (Int, Int),   -- ^ Size of the canvas, in pixels
-  fps :: Int,           -- ^ Target framerate,
+  fps :: Int,           -- ^ Target framerate
   backend :: Backend,   -- ^ What back end should the game use?
   exit :: Bool          -- ^ Should the game loop exit at the end of this frame?
 }
@@ -35,4 +38,5 @@ pattern Pos :: Float -> Float -> Float -> Position
 pattern Pos x y z = Position (V3 x y z)
 
 data Color = Color Float Float Float
-data Text = Text String
+newtype Text = Text String
+newtype Sprite = Sprite String

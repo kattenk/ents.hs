@@ -26,9 +26,7 @@ rainbow (Color r g b) timeStep
 
 fall :: Position -> Time -> Position
 fall (Pos x y z) ts =
-  Pos x
-      (y + (speed * ts))
-      0
+  Pos x (y + (speed * ts)) 0
 
 main :: IO ()
 main = do
@@ -36,6 +34,8 @@ main = do
     spawn (Pos 10 10 0)
           (Color 0 0 0)
           (Text "Hello LambdaGame")
+    spawn (Sprite "fripp.png")
+          (Pos 50 50 0)
     gameLoop $ do
       system rainbow
       system fall
