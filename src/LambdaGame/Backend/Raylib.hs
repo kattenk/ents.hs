@@ -1,13 +1,15 @@
-{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeApplications, PatternSynonyms #-}
+
 module LambdaGame.Backend.Raylib ( raylibBackend ) where
 
-import LambdaGame.Components (Backend(..), Window(..), Time(..))
+import LambdaGame.Components (Backend(..), Window(..), Time(..), Text(..), Position(..), Color (..))
 import LambdaGame.Scene (Scene, get, resource)
 import LambdaGame.Systems (system)
 import Control.Monad.IO.Class (liftIO)
 import Raylib.Core (clearBackground, initWindow, setTargetFPS, windowShouldClose,
-                    closeWindow, windowShouldClose, getFrameTime)
+                    closeWindow, windowShouldClose, getFrameTime, beginDrawing, endDrawing)
 import Raylib.Core.Text (drawText)
+import qualified Raylib.Types (Color(..))
 import Raylib.Util (drawing, WindowResources)
 import Raylib.Util.Colors (lightGray, black)
 import Data.Data (Proxy(..))
@@ -15,10 +17,10 @@ import Control.Monad (when)
 
 startRaylib :: Scene ()
 startRaylib = do
-  resource $ Time 0
+  resource (0 :: Float) -- Time
 
-  win <- get (Proxy @Window)
-  case win of
+  maybeWin <- get (Proxy @Window)
+  case maybeWin of
     (Just win) -> do
       raylibWindow <- liftIO $ uncurry initWindow (size win) (title win)
       liftIO $ setTargetFPS (fps win)
@@ -27,17 +29,25 @@ startRaylib = do
 
 updateTime :: Scene Time
 updateTime = do
-  frameTime <- liftIO getFrameTime
-  return $ Time frameTime
+  liftIO getFrameTime
+
+drawTexts :: Text -> Position -> Color -> Scene ()
+drawTexts (Text text) (Pos x y _) (Color r g b) = do
+  _ <- liftIO $ do
+    drawText text (round x) (round y) 50
+      (Raylib.Types.Color (round r)
+                          (round g)
+                          (round b) 255)
+  return ()
 
 updateRaylib :: Scene ()
 updateRaylib = do
   system updateTime
-  window <- get (Proxy @WindowResources)
-  _ <- liftIO $ drawing $ do
-    clearBackground black
-    drawText "Basic raylib window" 30 40 50 lightGray
-    return window
+
+  liftIO beginDrawing
+  liftIO $ clearBackground black
+  system drawTexts
+  liftIO endDrawing
 
   maybeWin <- get (Proxy @Window)
   case maybeWin of

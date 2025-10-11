@@ -25,10 +25,9 @@ initialState = SceneState
 defaultWindow :: Window
 defaultWindow = Window {
   title = "Game",
-  size = (1400, 1200),
+  size = (1400, 1200), -- remember this is for 4k
   fps = 60,
   backend = raylibBackend,
-  escapeToExit = True,
   exit = False
 }
 
@@ -61,7 +60,7 @@ gameLoop userLoop = do
       let elapsed = realToFrac $ diffUTCTime endTime startTime
       let remaining = targetFrameTime - elapsed
 
-      when (remaining > 0) $ do
+      when (remaining > (0 :: Double)) $ do
         liftIO $ threadDelay (round (remaining * 1000000))
 
       unless (exit win) loop

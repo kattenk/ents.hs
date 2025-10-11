@@ -73,7 +73,8 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:   time,
+    build-depends:   linear ^>=1.23.2,
+                     time,
                      base,
                      mtl,
                      vector,
