@@ -1,8 +1,9 @@
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE NamedFieldPuns #-}
-module LambdaGame.Game ( runGame, gameLoop, GameLoop(..) ) where
+module LambdaGame.Game ( runGame, gameLoop ) where
 
 import LambdaGame.Scene (Scene, SceneState(..), runScene, resource, get)
+import LambdaGame.Components (Window(..), Backend(..))
+import LambdaGame.Backend.Raylib (raylibBackend)
 import qualified Data.Map as Map
 import Data.Data (Proxy(..))
 import Control.Monad (unless, when)
@@ -21,34 +22,45 @@ initialState = SceneState
     currentEntity = 0
   }
 
+defaultWindow :: Window
+defaultWindow = Window {
+  title = "Game",
+  size = (640, 480),
+  fps = 500,
+  backend = raylibBackend,
+  exit = False
+}
+
+getWindow :: Scene Window
+getWindow = do
+  maybeWin <- get (Proxy @Window)
+  maybe (do resource defaultWindow
+            return defaultWindow) return maybeWin
+
 runGame :: Scene a -> IO ()
 runGame game = do
   _ <- runScene initialState game
   return ()
 
-data GameLoop = GameLoop {
-  loopRate :: Int,
-  exit :: Bool
-}
-
-gl :: GameLoop
-gl = GameLoop { loopRate = 60, exit = False }
-
 gameLoop :: Scene a -> Scene ()
 gameLoop userLoop = do
-  resource gl
+  win <- getWindow
+  startBackend (backend win)
+
   loop where
-    targetFrameTime = 1.0 / fromIntegral (loopRate gl)
     loop = do
+      win <- getWindow
+      updateBackend (backend win)
+      let targetFrameTime = 1.0 / fromIntegral (fps win)
+
       startTime <- liftIO getCurrentTime
       _ <- userLoop
       endTime <- liftIO getCurrentTime
+
       let elapsed = realToFrac $ diffUTCTime endTime startTime
       let remaining = targetFrameTime - elapsed
-      runAgain <- get (Proxy @GameLoop)
-      case runAgain of
-        (Just (GameLoop { exit })) -> do
-          when (remaining > 0) $ do
-            liftIO $ threadDelay (round (remaining * 1000000))
-          unless exit loop
-        Nothing -> return ()
+
+      when (remaining > 0) $ do
+        liftIO $ threadDelay (round (remaining * 1000000))
+
+      unless (exit win) loop

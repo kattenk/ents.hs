@@ -8,6 +8,7 @@ module LambdaGame.Systems (
 import LambdaGame.Scene
 import Data.Data (Proxy(..))
 import Data.Typeable (Typeable)
+import Control.Monad (filterM, forM_)
 import Control.Monad.State.Strict hiding (get)
 
 -- | Action for running a System

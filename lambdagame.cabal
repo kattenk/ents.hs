@@ -62,6 +62,8 @@ library
     exposed-modules:  LambdaGame,
                       LambdaGame.Scene,
                       LambdaGame.Systems,
+                      LambdaGame.Components,
+                      LambdaGame.Backend.Raylib,
                       LambdaGame.Game
 
     -- Modules included in this rary but not exported.
@@ -71,12 +73,13 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:   time ^>=1.14,
-                     base ^>=4.21.0.0,
-                     mtl ^>=2.2.2,
-                     vector ^>=0.13.2.0,
-                     containers ^>=0.6.7,
-                     transformers >=0.5.6 && <0.7
+    build-depends:   time,
+                     base,
+                     mtl,
+                     vector,
+                     containers,
+                     transformers,
+                     h-raylib
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -87,4 +90,4 @@ library
 executable lambdagame-app
   main-is: Main.hs
   hs-source-dirs: app
-  build-depends: mtl ^>=2.2.2, base, lambdagame, containers ^>=0.6.7
+  build-depends: mtl, base, lambdagame, containers
