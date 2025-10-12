@@ -4,7 +4,7 @@ module Main (main) where
 import LambdaGame
 
 speed :: Float
-speed = 100
+speed = 2
 
 -- | Changes color over time
 rainbow :: Color -> Time -> Color
@@ -26,9 +26,11 @@ rainbow (Color r g b) timeStep
     changeAmount = speed * timeStep
     clamp x = max 0 (min 255 x)
 
--- fall :: Position -> Time -> Position
--- fall (Pos x y z) ts =
---   Pos x (y + (speed * ts)) 0
+data Fall = Fall
+
+fall :: Position -> Time -> Fall -> Position
+fall (Position x y z) ts f =
+  Position x (y + (speed * ts)) 0
 
 main :: IO ()
 main = do
@@ -42,6 +44,8 @@ main = do
     
     spawn (Sprite "bird.png")
           (Position 20 100 0)
+          (Fall)
     
     gameLoop $ do
       system rainbow
+      system fall

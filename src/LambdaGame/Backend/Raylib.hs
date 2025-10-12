@@ -18,8 +18,8 @@ import Data.Data (Proxy(..))
 import Control.Monad (when)
 import Data.Map.Strict (Map)
 import qualified Data.Map as Map
-import Raylib.Core.Textures (loadTexture, drawTexture, loadRenderTexture, drawTexturePro)
-import Raylib.Types (Texture, Rectangle (Rectangle), RenderTexture(..))
+import Raylib.Core.Textures (loadTexture, loadRenderTexture, drawTexturePro)
+import Raylib.Types (Texture (texture'height, texture'width), Rectangle (Rectangle), RenderTexture(..))
 import Linear.V2 (V2(..))
 
 data Assets = Assets {
@@ -42,8 +42,13 @@ getTextureHandle fileName = do
 getScreenTexture :: Window -> Scene RenderTexture
 getScreenTexture win = do
   maybeTexture <- get (Proxy @RenderTexture)
+  screenWidth <- liftIO getScreenWidth
+  screenHeight <- liftIO getScreenHeight
 
-  maybe (do screenTexture <- liftIO $ uncurry loadRenderTexture (res win)
+  maybe (do screenTexture <- liftIO $
+              uncurry loadRenderTexture (case renderMode win of
+                Smooth -> windowSize (screenWidth, screenHeight) win
+                Snap -> res win)
             resource screenTexture
             return screenTexture)
         return maybeTexture
@@ -73,14 +78,45 @@ updateTime = do
 
 drawSprites :: Sprite -> Position -> Scene ()
 drawSprites (Sprite spr) pos = do
-  texture <- getTextureHandle spr
-  liftIO $ do
-    drawTexture texture (round (x pos))
-                        (round (y pos))
-                        (Raylib.Types.Color 255
-                                            255
-                                            255 255)
-  return ()
+  let fi = fromIntegral
+  maybeWin <- get (Proxy @Window)
+  case maybeWin of
+    Nothing -> return ()
+    (Just win) -> do
+      texture <- getTextureHandle spr
+      let textureWidth = fi (texture'width texture)
+          textureHeight = fi (texture'height texture)
+      screenWidth <- liftIO getScreenWidth
+      screenHeight <- liftIO getScreenHeight
+
+      liftIO $ do
+        case renderMode win of
+          -- In Snap mode we are rendering as normal, at (probably low) resolution
+          -- so we basically just render as-is
+          Snap -> drawTexturePro texture
+                                 (Rectangle 0 0 textureWidth textureHeight)
+                                 (Rectangle (x pos) (y pos) textureWidth textureHeight)
+                                 (V2 0 0)
+                                 0
+                                 (Raylib.Types.Color 255 255 255 255)
+          -- In Smooth mode we scale the Sprites
+          Smooth ->
+            let scaleMultiplier = (fi (fst (windowSize (screenWidth, screenHeight) win)) / fi (fst (res win))) in
+              drawTexturePro texture
+                             (Rectangle 0 0 textureWidth textureHeight)
+                             (Rectangle (x pos * scaleMultiplier)
+                                        (y pos * scaleMultiplier)
+                                        (textureWidth * scaleMultiplier)
+                                        (textureHeight * scaleMultiplier))
+                             (V2 0 0)
+                             0
+                             (Raylib.Types.Color 255 255 255 255)
+
+        -- drawTexture texture (round (x pos))
+        --                     (round (y pos))
+        --                     (Raylib.Types.Color 255
+        --                                         255
+        --                                         255 255)
 
 drawTexts :: Text -> Position -> Color -> Scene ()
 drawTexts (Text text) pos (Color r g b) = do
@@ -119,7 +155,7 @@ updateRaylib = do
       let src = case renderMode win of
                   Smooth -> Rectangle 0 0 (fi winWidth) (- fi winHeight)
                   Snap -> Rectangle 0 0 resWidth (- resHeight)
-        
+
       let dest = Rectangle 0 0 (fi winWidth) (fi winHeight)
 
       liftIO beginDrawing
