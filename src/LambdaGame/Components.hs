@@ -2,7 +2,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 
 module LambdaGame.Components (
-  Position(Pos, Position), x, y, Size(..),
+  Position(Pos, Position), x, y, z, Size(..),
   Color(..), Text(..), Sprite(..)
 ) where
 

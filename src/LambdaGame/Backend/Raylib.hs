@@ -1,9 +1,10 @@
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE BlockArguments #-}
 
 module LambdaGame.Backend.Raylib ( raylibBackend ) where
 
 import LambdaGame.Components (Text(..), Position(..), Color (..), Sprite (..), x, y)
-import LambdaGame.Resources (Backend(..), Window(..), Time, windowSize)
+import LambdaGame.Resources (Backend(..), Window(..), Time, windowSize, RenderMode (..))
 import LambdaGame.Scene (Scene, get, resource)
 import LambdaGame.Systems (system)
 import Control.Monad.IO.Class (liftIO)
@@ -57,10 +58,10 @@ startRaylib = do
     (Just win) -> do
       screenWidth <- liftIO getScreenWidth
       screenHeight <- liftIO getScreenHeight
-      
+
       raylibWindow <- liftIO $ uncurry
         initWindow (windowSize (screenWidth, screenHeight) win) (title win)
-      
+
       liftIO $ setTargetFPS (targetFps win)
       resource raylibWindow
 
@@ -113,18 +114,16 @@ updateRaylib = do
       let fi = fromIntegral
       let resWidth = fi (fst (res win))
       let resHeight = fi (snd (res win))
+      let (winWidth, winHeight) = windowSize (screenWidth, screenHeight) win
 
-      let scale = min (fi screenWidth / resWidth)
-                      (fi screenHeight / resHeight)
-      
-      let src = Rectangle 0 0 resWidth (- resHeight)
-      let dest = Rectangle ((fi screenWidth - resWidth * scale) / 2)
-                           ((fi screenHeight - resHeight * scale) / 2)
-                           (resWidth * scale)
-                           (resHeight * scale)
+      let src = case renderMode win of
+                  Smooth -> Rectangle 0 0 (fi winWidth) (- fi winHeight)
+                  Snap -> Rectangle 0 0 resWidth (- resHeight)
+        
+      let dest = Rectangle 0 0 (fi winWidth) (fi winHeight)
 
       liftIO beginDrawing
-      liftIO $ drawTexturePro (renderTexture'texture screenTexture) src dest (V2 0 0) 0 white 
+      liftIO $ drawTexturePro (renderTexture'texture screenTexture) src dest (V2 0 0) 0 white
       liftIO endDrawing
 
       -- Use Raylib's WindowShouldClose function to exit
