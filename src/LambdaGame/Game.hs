@@ -2,7 +2,7 @@
 module LambdaGame.Game ( runGame, gameLoop ) where
 
 import LambdaGame.Scene (Scene, SceneState(..), runScene, resource, get)
-import LambdaGame.Components (Window(..), Backend(..))
+import LambdaGame.Resources (Window(..), Backend(..))
 import LambdaGame.Backend.Raylib (raylibBackend)
 import qualified Data.Map as Map
 import Data.Data (Proxy(..))

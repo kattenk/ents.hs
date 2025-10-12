@@ -62,6 +62,7 @@ library
     exposed-modules:  LambdaGame,
                       LambdaGame.Scene,
                       LambdaGame.Systems,
+                      LambdaGame.Resources,
                       LambdaGame.Components,
                       LambdaGame.Backend.Raylib,
                       LambdaGame.Game

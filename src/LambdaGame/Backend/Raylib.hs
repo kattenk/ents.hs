@@ -2,7 +2,8 @@
 
 module LambdaGame.Backend.Raylib ( raylibBackend ) where
 
-import LambdaGame.Components (Backend(..), Window(..), Time, Text(..), Position(..), Color (..), Sprite (..))
+import LambdaGame.Components (Text(..), Position(..), Color (..), Sprite (..))
+import LambdaGame.Resources (Backend(..), Window(..), Time)
 import LambdaGame.Scene (Scene, get, resource)
 import LambdaGame.Systems (system)
 import Control.Monad.IO.Class (liftIO)
