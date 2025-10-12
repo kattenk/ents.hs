@@ -25,8 +25,9 @@ initialState = SceneState
 defaultWindow :: Window
 defaultWindow = Window {
   title = "Game",
-  size = (1400, 1200), -- remember this is for 4k
-  fps = 60,
+  res = (144, 256),
+  size = (864, 1536),
+  targetFps = 300,
   backend = raylibBackend,
   exit = False
 }
@@ -51,7 +52,7 @@ gameLoop userLoop = do
     loop = do
       win <- getWindow
       updateBackend (backend win)
-      let targetFrameTime = 1.0 / fromIntegral (fps win)
+      let targetFrameTime = 1.0 / fromIntegral (targetFps win)
 
       startTime <- liftIO getCurrentTime
       _ <- userLoop

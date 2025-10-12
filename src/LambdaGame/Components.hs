@@ -4,11 +4,12 @@
 module LambdaGame.Components (
   Window(..), Backend(..), Time,
   Position(Position, Pos), Size(..),
-  Color(..), Text(..), Sprite(..)
+  Color(..), Text(..), Sprite(..), Mouse(..)
 ) where
 
 import LambdaGame.Scene (Scene)
 import Linear.V3
+import Data.Set
 
 data Backend = Backend {
   startBackend :: Scene (),  -- ^ Startup action
@@ -18,14 +19,28 @@ data Backend = Backend {
 
 data Window = Window {
   title :: String,      -- ^ Window title
-  size :: (Int, Int),   -- ^ Size of the canvas, in pixels
-  fps :: Int,           -- ^ Target framerate
+  res :: (Int, Int),    -- ^ Size of the canvas, in pixels
+  size :: (Int, Int),   -- ^ Actual size of the window, in pixels
+  targetFps :: Int,     -- ^ Target framerate
   backend :: Backend,   -- ^ What back end should the game use?
   exit :: Bool          -- ^ Should the game loop exit at the end of this frame?
 }
 
--- This is called "Time" but it's actually the frame time
+-- This is called "Time" but it's actually the frame time (delta time)
 type Time = Float
+
+data Mouse = Mouse {
+  mousePos  :: (Int, Int),
+  mouseMove :: (Int, Int)
+}
+
+data Key = W | A | S | D
+
+data Keyboard = Keyboard {
+  downKeys     :: Set Key,
+  pressedKeys  :: Set Key,
+  releasedKeys :: Set Key
+}
 
 newtype Position = Position (V3 Float)
   deriving (Eq, Show, Num)
