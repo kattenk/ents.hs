@@ -2,7 +2,7 @@
 module LambdaGame.Game ( runGame, gameLoop ) where
 
 import LambdaGame.Scene (Scene, SceneState(..), runScene, resource, get)
-import LambdaGame.Resources (Window(..), Backend(..))
+import LambdaGame.Resources (Window(..), WindowSize(..), Backend(..), RenderMode (Snap))
 import LambdaGame.Backend.Raylib (raylibBackend)
 import qualified Data.Map as Map
 import Data.Data (Proxy(..))
@@ -26,7 +26,8 @@ defaultWindow :: Window
 defaultWindow = Window {
   title = "Game",
   res = (144, 256),
-  size = (864, 1536),
+  size = Automatic,
+  renderMode = Snap,
   targetFps = 300,
   backend = raylibBackend,
   exit = False

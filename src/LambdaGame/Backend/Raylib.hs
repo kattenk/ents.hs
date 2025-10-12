@@ -2,8 +2,8 @@
 
 module LambdaGame.Backend.Raylib ( raylibBackend ) where
 
-import LambdaGame.Components (Text(..), Position(..), Color (..), Sprite (..))
-import LambdaGame.Resources (Backend(..), Window(..), Time)
+import LambdaGame.Components (Text(..), Position(..), Color (..), Sprite (..), x, y)
+import LambdaGame.Resources (Backend(..), Window(..), Time, windowSize)
 import LambdaGame.Scene (Scene, get, resource)
 import LambdaGame.Systems (system)
 import Control.Monad.IO.Class (liftIO)
@@ -55,7 +55,12 @@ startRaylib = do
   maybeWin <- get (Proxy @Window)
   case maybeWin of
     (Just win) -> do
-      raylibWindow <- liftIO $ uncurry initWindow (size win) (title win)
+      screenWidth <- liftIO getScreenWidth
+      screenHeight <- liftIO getScreenHeight
+      
+      raylibWindow <- liftIO $ uncurry
+        initWindow (windowSize (screenWidth, screenHeight) win) (title win)
+      
       liftIO $ setTargetFPS (targetFps win)
       resource raylibWindow
 
@@ -66,20 +71,20 @@ updateTime = do
   liftIO getFrameTime
 
 drawSprites :: Sprite -> Position -> Scene ()
-drawSprites (Sprite spr) (Pos x y _) = do
+drawSprites (Sprite spr) pos = do
   texture <- getTextureHandle spr
   liftIO $ do
-    drawTexture texture (round x)
-                        (round y)
+    drawTexture texture (round (x pos))
+                        (round (y pos))
                         (Raylib.Types.Color 255
                                             255
                                             255 255)
   return ()
 
 drawTexts :: Text -> Position -> Color -> Scene ()
-drawTexts (Text text) (Pos x y _) (Color r g b) = do
+drawTexts (Text text) pos (Color r g b) = do
   liftIO $ do
-    drawText text (round x) (round y) 10
+    drawText text (round (x pos)) (round (y pos)) 10
       (Raylib.Types.Color (round r)
                           (round g)
                           (round b) 255)

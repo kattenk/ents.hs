@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Redundant bracket" #-}
 module Main (main) where
 import LambdaGame
 
@@ -31,15 +33,15 @@ rainbow (Color r g b) timeStep
 main :: IO ()
 main = do
   runGame $ do
-    spawn (Pos 10 10 0)
-          (Color 0 0 0)
-          (Text "Hello LambdaGame")
+    -- spawn (Position 10 10 0)
+    --       (Color 0 0 0)
+    --       (Text "Hello LambdaGame")
   
     spawn (Sprite "backdrop.png")
-          (Pos 0 0 0)
+          (Position 0 0 0)
     
     spawn (Sprite "bird.png")
-          (Pos 20 100 0)
+          (Position 20 100 0)
     
     gameLoop $ do
       system rainbow
