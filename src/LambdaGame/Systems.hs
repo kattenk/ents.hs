@@ -34,14 +34,15 @@ class (Typeable p) => SystemParam p where
   -- (shouldn't happen ever after 'shouldRun' returns True).
   argumentFor :: Int -> Scene (Maybe p)
 
-instance (Typeable a) => SystemParam a where
+instance {-# OVERLAPPABLE #-} (Typeable a) => SystemParam a where
   shouldRun e = do
     has (e, Proxy @a)
 
   argumentFor e = do
     get (e, Proxy @a)
 
-instance (Typeable a) => SystemParam (Maybe a) where
+
+instance {-# OVERLAPPING #-} (Typeable a) => SystemParam (Maybe a) where
   shouldRun _ = return True
   argumentFor e = do
     component <- get (e, Proxy @a)

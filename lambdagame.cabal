@@ -92,4 +92,4 @@ library
 executable lambdagame-app
   main-is: Main.hs
   hs-source-dirs: app
-  build-depends: mtl, base, lambdagame, containers, h-raylib
+  build-depends: random ^>=1.3.1, linear ^>=1.23.2, mtl, base, lambdagame, containers, h-raylib
