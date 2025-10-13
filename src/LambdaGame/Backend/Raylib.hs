@@ -50,6 +50,14 @@ startRaylib = do
   resource $ Assets { textures = Map.empty, sounds = Map.empty }
   resource $ Mouse { mousePos = (0, 0),
                      mouseMovement = (0, 0)}
+  resource RL.Camera3D {
+    RL.camera3D'position = V3 0 0 0,
+    RL.camera3D'target = V3 0 0 1,
+    RL.camera3D'up = V3 0 1 0,
+    RL.camera3D'fovy = 100,
+    RL.camera3D'projection = RL.CameraPerspective
+  }
+
   resource $ Keyboard {
     downKeys = Set.empty,
     pressedKeys = Set.empty,
@@ -110,7 +118,7 @@ calculateScale (screenW, screenH) win =
 drawTexts :: Text -> Position -> Color -> Scene ()
 drawTexts (Text text) pos color = do
   liftIO $ do
-    drawText text (round (x pos)) (round (y pos)) 10
+    drawText text (round (x pos)) (round (y pos)) 60
       (toRaylibColor color)
   return ()
 
@@ -124,7 +132,7 @@ drawCubes :: Cube -> Maybe Position -> Maybe Color -> Maybe Rotation -> Scene ()
 drawCubes _ maybePos maybeColor maybeRot = do
   let pos = fromMaybe (Position 0 0 0) maybePos
   let color = fromMaybe (Color 255 255 255 255) maybeColor
-  let (Rotation yaw pitch roll) = fromMaybe (Rotation 0 40 0) maybeRot
+  let (Rotation yaw pitch roll) = fromMaybe (Rotation 0 0 0) maybeRot
   camera <- get (Proxy @RL.Camera3D)
   case camera of
     Nothing -> return ()
