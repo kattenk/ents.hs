@@ -1,6 +1,6 @@
 module LambdaGame.Resources (
     Backend(..), Window(..), WindowSize(..), windowSize,
-    Time, Key(..), Keyboard(..), Mouse(..), isKeyDown, TimeElapsed(..)
+    Time, Key(..), Keyboard(..), Mouse(..), isKeyDown, TimeElapsed(..), wasPressed
 ) where
 
 import LambdaGame.Scene (Scene)
@@ -20,6 +20,7 @@ data Window = Window {
   res :: (Int, Int),        -- ^ Size of the canvas, in pixels
   size :: WindowSize,       -- ^ Actual size of the window, in pixels
   targetFps :: Int,         -- ^ Target framerate
+  captureCursor :: Bool,    -- ^ Capture the mouse cursor?
   backend :: Backend,       -- ^ What backend should the game use?
   exit :: Bool              -- ^ Should the game exit at the end of this frame?
 }
@@ -45,6 +46,9 @@ data Keyboard = Keyboard {
 
 isKeyDown :: Key -> Keyboard -> Bool
 isKeyDown key board = Set.member key (downKeys board)
+
+wasPressed :: Keyboard -> Key -> Bool
+wasPressed board key = Set.member key (pressedKeys board)
 
 data Mouse = Mouse {
   mousePos :: (Float, Float),

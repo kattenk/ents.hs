@@ -1,14 +1,16 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE FlexibleInstances #-}
 
 module LambdaGame.Components (
-  Position(Pos, Position), Rotation(Rot, Rotation), x, y, z,
+  Position(Pos, Position), Rotation(Rot, Rotation), x, y, z, Velocity(Vel, Velocity),
   yaw, pitch, roll, forward, right, Size(..),
   Color(..), Text(..), Sprite(..), Cube(..), Camera3D(..)
 ) where
 
 import Linear.V3
 import Linear.Metric (normalize)
+import Linear (V2 (..))
 
 newtype Position = Pos (V3 Float)
   deriving (Eq, Show, Num)
@@ -16,14 +18,28 @@ newtype Position = Pos (V3 Float)
 newtype Rotation = Rot (V3 Float)
   deriving (Eq, Show, Num)
 
-x :: Position -> Float
-x (Pos (V3 x_ _ _)) = x_
+newtype Velocity = Vel (V3 Float)
+  deriving (Eq, Show, Num)
 
-y :: Position -> Float
-y (Pos (V3 _ y_ _)) = y_
+class HasXYZ a where
+  x :: a -> Float
+  y :: a -> Float
+  z :: a -> Float
 
-z :: Position -> Float
-z (Pos (V3 _ _ z_)) = z_
+instance HasXYZ Position where
+  x (Pos (V3 x_ _ _)) = x_
+  y (Pos (V3 _ y_ _)) = y_
+  z (Pos (V3 _ _ z_)) = z_
+
+instance HasXYZ (V3 Float) where
+  x (V3 x_ _ _) = x_
+  y (V3 _ y_ _) = y_
+  z (V3 _  _ x_) = x_
+
+instance HasXYZ (V2 Float) where
+  x (V2 x_ _ ) = x_
+  y (V2 _ y_ ) = y_
+  z (V2 _  _) = 0
 
 yaw :: Rotation -> Float
 yaw (Rot (V3 x_ _ _)) = x_
@@ -50,6 +66,10 @@ pattern Position x y z = Pos (V3 x y z)
 {-# COMPLETE Rotation #-}
 pattern Rotation :: Float -> Float -> Float -> Rotation
 pattern Rotation yaw pitch roll = Rot (V3 yaw pitch roll)
+
+{-# COMPLETE Velocity #-}
+pattern Velocity :: Float -> Float -> Float -> Velocity
+pattern Velocity x y z = Vel (V3 x y z)
 
 newtype Size = Size (V3 Float)
   deriving (Eq, Show, Num)

@@ -25,6 +25,7 @@ import Raylib.Core.Models (drawCube)
 import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Raylib.Util.RLGL (rlPushMatrix, rlPopMatrix, rlRotatef, rlTranslatef)
+import Data.List (sortOn)
 
 data Assets = Assets {
   textures :: Map String RL.Texture,
@@ -46,6 +47,7 @@ getTextureHandle fileName = do
 startRaylib :: Scene ()
 startRaylib = do
   resource (0 :: Float) -- Time
+  resource ([] :: [SpriteCommand])
   resource (TimeElapsed 0)
   resource $ Assets { textures = Map.empty, sounds = Map.empty }
   resource $ Mouse { mousePos = (0, 0),
@@ -74,8 +76,11 @@ startRaylib = do
         initWindow (windowSize (screenWidth, screenHeight) win) (title win)
 
       liftIO $ setTargetFPS (targetFps win)
-      liftIO hideCursor
-      liftIO disableCursor
+
+      when (captureCursor win) $ do
+        liftIO hideCursor
+        liftIO disableCursor
+
       resource raylibWindow
 
     Nothing -> return ()
@@ -87,8 +92,14 @@ updateTime = do
 addTime :: TimeElapsed -> Time -> TimeElapsed
 addTime (TimeElapsed t) d = TimeElapsed (t + d)
 
-drawSprites :: Sprite -> Position -> Scene ()
-drawSprites (Sprite spr) pos = do
+data SpriteCommand = SpriteCommand {
+  sprTexture :: RL.Texture,
+  sprPosition :: V3 Float,
+  sprSize :: V2 Float
+}
+
+recordSprites :: [SpriteCommand] -> Sprite -> Position -> Scene ()
+recordSprites cmds (Sprite spr) pos = do
   maybeWin <- get (Proxy @Window)
   case maybeWin of
     Nothing -> return ()
@@ -100,14 +111,27 @@ drawSprites (Sprite spr) pos = do
       let scale = calculateScale (screenW, screenH) win
           texW = fromIntegral (RL.texture'width texture)
           texH = fromIntegral (RL.texture'height texture)
-          destRect = RL.Rectangle
-            (x pos * scale)
-            (y pos * scale)
-            (texW * scale)
-            (texH * scale)
-          srcRect = RL.Rectangle 0 0 texW texH
 
-      liftIO $ drawTexturePro texture srcRect destRect (V2 0 0) 0 white
+      resource $ SpriteCommand {
+        sprTexture = texture,
+        sprPosition = V3 ((x pos) * scale) ((y pos) * scale) (z pos),
+        sprSize = V2 (texW * scale) (texH * scale)
+      } : cmds
+
+drawSprites :: [SpriteCommand] -> Scene ()
+drawSprites cmds = do
+  let sortedCmds = sortOn ((\(V3 _ _ z) -> z) . sprPosition) cmds
+-- DrawTexturePro(Texture2D texture, Rectangle source, Rectangle dest,
+               -- Vector2 origin, float rotation, Color tint);
+  mapM_ (\cmd -> do
+    liftIO $ drawTexturePro (sprTexture cmd)
+                            (RL.Rectangle 0 0 (fromIntegral (RL.texture'width (sprTexture cmd)))
+                                              (fromIntegral (RL.texture'height (sprTexture cmd))))
+                            (RL.Rectangle (x (sprPosition cmd))
+                                          (y (sprPosition cmd))
+                                          (x (sprSize cmd))
+                                          (y (sprSize cmd)))
+                            (V2 0 0) 0 (RL.Color 255 255 255 255)) sortedCmds
 
 calculateScale :: (Int, Int) -> Window -> Float
 calculateScale (screenW, screenH) win =
@@ -204,6 +228,8 @@ updateRaylib = do
       liftIO beginDrawing
       liftIO $ clearBackground black
       -- Drawing systems
+      resource ([] :: [SpriteCommand])
+      system recordSprites
       system drawSprites
       system drawTexts
       system drawCubes

@@ -28,6 +28,7 @@ defaultWindow = Window {
   res = (256, 256),
   size = Automatic,
   targetFps = 300,
+  captureCursor = False,
   backend = raylibBackend,
   exit = False
 }
