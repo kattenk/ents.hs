@@ -2,7 +2,7 @@
              FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
 
 module LambdaGame.Systems (
-  SystemParam(..), SystemResult(..), system, Every(..),
+  SystemParam(..), SystemResult(..), system, Not(..), Every(..),
 ) where
 
 import LambdaGame.Scene
@@ -49,6 +49,13 @@ instance {-# OVERLAPS #-} (Typeable a) => SystemParam (Maybe a) where
   argumentFor e = do
     component <- get (e, Proxy @a)
     return (Just component)
+
+data Not a = Not
+instance {-# OVERLAPS #-} (Typeable a) => SystemParam (Not a) where
+  shouldRun e = do
+    not <$> has (e, Proxy @a)
+
+  argumentFor _ = return (Just Not)
 
 -- | This is called "Every" but what it really means is
 -- "Every component of this type except the current entities one"

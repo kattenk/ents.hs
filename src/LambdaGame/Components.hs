@@ -41,6 +41,11 @@ instance HasXYZ (V2 Float) where
   y (V2 _ y_ ) = y_
   z (V2 _  _) = 0
 
+instance HasXYZ Velocity where
+  x (Vel (V3 x_ _ _)) = x_
+  y (Vel (V3 _ y_ _)) = y_
+  z (Vel (V3 _ _ z_)) = z_
+
 yaw :: Rotation -> Float
 yaw (Rot (V3 x_ _ _)) = x_
 

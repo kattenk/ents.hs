@@ -14,40 +14,47 @@ import Data.Data (Proxy(..))
 scrollSpeed = 55
 pipeGap = 50
 pipeRate = 1.2
-flapForce = -200
-gravityForce = 650
+flapForce = -220
+gravityForce = 800
 
 -- | Timer for spawning pipes
 newtype PipeTimer = PipeTimer Float
 
 -- Marker components
-data Bird = Bird -- ^ For the bird (when playing)
-data Tap = Tap   -- ^ Relating to the "Tap" graphic at the start of the game
-
-data Scroll = Scroll           -- ^ Moves leftwards forever
-            | ScrollRepeat Int -- ^ Move leftwards until a reset point
+data Bird = Bird       -- ^ For the bird (when playing)
+data Gravity = Gravity -- ^ Affected by gravity
+data Ground = Ground   -- ^ For the ground
+data Pipe = Pipe       -- ^ For pipes
+data Tap = Tap         -- ^ Relating to the "Tap" graphic at the start of the game
 
 data Collider = Collider Float Float Float Float
 data Animation = Animation Float    -- ^ Anim speed
                            [String] -- ^ Frames
-
-isFlapping :: Keyboard -> Mouse -> Bool
-isFlapping kb mouse =
-  wasPressed kb Space || leftMousePressed mouse
 
 birdAnimation = ["birdFlapUp.png",
                  "bird.png",
                  "birdFlapDown.png",
                  "bird.png"]
 
+isFlapping :: Keyboard -> Mouse -> Bool
+isFlapping kb mouse =
+  wasPressed kb Space || leftMousePressed mouse
+
 -- | Applies gravity
-gravity :: Velocity -> Time -> Velocity
-gravity vel t = vel + Velocity 0 (gravityForce * t) 0
+gravity :: Gravity -> Velocity -> Time -> Velocity
+gravity _ vel t = vel + Velocity 0 (gravityForce * t) 0
 
 -- | Applies velocity
 move :: Velocity -> Position -> Time -> Position
 move (Velocity x y z) pos t =
   pos + Position (x * t) (y * t) (z * t)
+
+-- | Resets the grounds X coord every time it exceeds a certain point
+scrollGround :: Ground -> Position -> Position
+scrollGround _ pos =
+  if x pos < -24 then
+    Position 0 (y pos) 1
+  else pos
 
 -- | Flaps the bird
 flap :: Bird -> Velocity -> Keyboard -> Mouse -> Velocity
@@ -64,16 +71,6 @@ flapSound _ keyboard mouse =
   else
     Nothing
 
--- | Moves the pipes and the ground
-scroll :: Scroll -> Position -> Time -> Position
-scroll Scroll pos t =
-  Position (x pos - (scrollSpeed * t)) (y pos) (z pos)
-scroll (ScrollRepeat resetPoint) pos t =
-  if x pos > fromIntegral resetPoint then
-    Position (x pos - (scrollSpeed * t)) (y pos) (z pos)
-  else
-    Position 0 (y pos) (z pos)
-
 -- | Spawns new pipes when PipeTimer reaches zero
 spawnPipes :: Bird -> PipeTimer -> Time -> Scene ()
 spawnPipes _ (PipeTimer timer) timeStep = do
@@ -85,15 +82,17 @@ spawnPipes _ (PipeTimer timer) timeStep = do
       (pipeEndHeight + (pipeGap / 2),
        pipeSprHeight - (pipeEndHeight + (pipeGap / 2)))
 
-    spawn (Sprite "pipeBottom.png")
+    spawn Pipe
+          (Sprite "pipeBottom.png")
           (Position 144 (gapCenterY + (pipeGap / 2)) 0.5)
           (Collider 0 0 26 200)
-          Scroll
+          (Velocity (-scrollSpeed) 0 0)
 
-    spawn (Sprite "pipeTop.png")
+    spawn Pipe
+          (Sprite "pipeTop.png")
           (Position 144 ((-pipeSprHeight) + (gapCenterY - (pipeGap / 2))) 0.5)
           (Collider 0 0 26 200)
-          Scroll
+          (Velocity (-scrollSpeed) 0 0)
 
     resource (PipeTimer pipeRate)
 
@@ -115,7 +114,7 @@ collision bird (Collider x1 y1 w1 h1) (Every colliders) t = do
            y2 + h2 <= y1) colliders
   when (or overlaps) $ do
     remove bird -- remove the Bird component from the bird after death
-    system (\(scroll :: Scroll) -> remove scroll) -- stop anything from scrolling
+    system (\(vel :: Velocity) -> Velocity 0 (y vel) 0) -- stop anything from scrolling
     set $ Sound "death.ogg"
 
 -- | Animates Sprite based on 'Animation' component
@@ -132,10 +131,11 @@ startGame _ (Sprite spr) mouse keyboard =
     _ | spr `elem` birdAnimation -> do
           remove Tap
           set Bird
+          set Gravity
           set (Velocity 0 0 0)
       -- Tapping to start de-spawns the "Tap" graphic
-      | spr == "tap.png" -> do despawn
-      | otherwise -> pure ()
+      | spr == "tap.png" -> despawn
+      | otherwise -> return ()
 
 main :: IO ()
 main = do
@@ -155,10 +155,11 @@ main = do
     spawn (Sprite "backdrop.png")
           (Position 0 0 0)
 
-    spawn (Sprite "ground.png")
+    spawn Ground
+          (Sprite "ground.png")
           (Position 0 200 1)
-          (ScrollRepeat (-24))
           (Collider 0 0 168 56)
+          (Velocity (-scrollSpeed) 0 0)
 
     spawn Tap
           (Sprite "bird.png")
@@ -177,9 +178,9 @@ main = do
       system startGame
       system gravity
       system move
+      system scrollGround
       system flap
       system flapSound
-      system scroll
       system spawnPipes
       system despawnPipes
       system updateColliders
