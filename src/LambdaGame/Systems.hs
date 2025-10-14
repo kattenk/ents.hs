@@ -2,7 +2,7 @@
              FlexibleInstances, UndecidableInstances, FlexibleContexts #-}
 
 module LambdaGame.Systems (
-  SystemParam(..), SystemResult(..), system
+  SystemParam(..), SystemResult(..), system, Every(..),
 ) where
 
 import LambdaGame.Scene
@@ -10,6 +10,7 @@ import Data.Data (Proxy(..))
 import Data.Typeable (Typeable)
 import Control.Monad (filterM, forM_)
 import Control.Monad.State.Strict hiding (get)
+import Data.Maybe (catMaybes)
 
 -- | Action for running a System
 system :: (SystemFilter f, SystemRunner f) => f -> Scene ()
@@ -47,6 +48,21 @@ instance {-# OVERLAPPING #-} (Typeable a) => SystemParam (Maybe a) where
   argumentFor e = do
     component <- get (e, Proxy @a)
     return (Just component)
+
+-- | This is called "Every" but what it really means is
+-- "Every component of this type except the current entities one"
+newtype Every a = Every [a]
+instance {-# OVERLAPPING #-} (Typeable a) => SystemParam (Every a) where
+  shouldRun _ = return True
+  argumentFor e = do
+    entities <- gets entityCount
+    let entitiesToRunOn = filter (/= e) [0 .. (entities - 1)]
+
+    comps <- mapM
+      (\eid -> do
+        get (eid, Proxy @a))
+      entitiesToRunOn
+    return $ Just (Every (catMaybes comps))
 
 class SystemFilter f where
   -- | Takes a system function and returns a "filter" function,
