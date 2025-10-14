@@ -5,7 +5,7 @@ module LambdaGame.Scene (
   Scene, SceneState(..), runScene,
   currentEnt, resource, isResource,
   ComponentAccess(..), ReturnType,
-  Spawn(..), Despawn(..)
+  Spawn(..), Despawn(..), getComponentVec
 ) where
 
 import Data.Map.Strict (Map)
@@ -73,7 +73,7 @@ isResource _ = do
   res <- getResource @a
   return $ isJust res
 
--- | Internal-only function for retrieving a component vector from storage,
+-- | Function for retrieving a component vector from storage,
 -- for reading or writing to it.
 getComponentVec :: forall a. Rep a => Scene (Maybe (IOVector (Maybe a)))
 getComponentVec = do
@@ -124,7 +124,9 @@ instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => Componen
     else do
       componentVec <- getComponentVec
       case componentVec of
-        Nothing -> return ()
+        Nothing -> do
+          _ <- makeComponentVector c
+          set c
         (Just vec) -> Vector.write vec (fromIntegral i) (Just c)
 
   has (i, _) = do
@@ -166,6 +168,30 @@ makeClearFunction _ i = do
     (Just vec) -> Vector.write vec i Nothing
     Nothing -> return ()
 
+makeComponentVector :: forall c. Rep c => c -> Scene (IOVector (Maybe c))
+makeComponentVector a = do
+  slots <- gets entityCount
+  vec <- Vector.replicate slots (Nothing :: Maybe a)
+
+  modify $ \scnState -> scnState
+    { components = Map.insert (rep a)
+                              (toDyn vec)
+                              (components scnState) }
+
+  -- modify the growComponents action to be itself joined with
+  -- a new action that grows the new vector
+  modify $ \scnState -> scnState
+    { growComponents = growComponents scnState >> makeVectorGrower a}
+  
+  -- similar thing with clearing
+  clearEntityFn <- gets clearEntity
+  modify $ \scnState -> scnState
+    { clearEntity =
+        \i -> do clearEntityFn i
+                 makeClearFunction a i}
+
+  return vec
+
 -- takes an entity index and returns an action
 -- that adds some component to that entity
 type ComponentAdder = (Int -> Scene ())
@@ -176,28 +202,7 @@ makeComponentAdder a index = do
 
   componentVec <- case maybeComponentVec of
     (Just vec) -> return vec
-    Nothing -> do
-      slots <- gets entityCount
-      vec <- Vector.replicate slots (Nothing :: Maybe a)
-
-      modify $ \scnState -> scnState
-        { components = Map.insert (rep a)
-                                  (toDyn vec)
-                                  (components scnState) }
-
-      -- modify the growComponents action to be itself joined with
-      -- a new action that grows the new vector
-      modify $ \scnState -> scnState
-        { growComponents = growComponents scnState >> makeVectorGrower a}
-      
-      -- similar thing with clearing
-      clearEntityFn <- gets clearEntity
-      modify $ \scnState -> scnState
-        { clearEntity =
-            \i -> do clearEntityFn i
-                     makeClearFunction a i}
-
-      return vec
+    Nothing -> makeComponentVector a
 
   Vector.write componentVec index (Just a)
 

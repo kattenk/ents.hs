@@ -3,16 +3,18 @@
 
 module LambdaGame.Backend.Raylib ( raylibBackend ) where
 
-import LambdaGame.Components (Text(..), Position(..), Color (..), Sprite (..), Cube, x, y, z, Rotation (..), Camera3D (..), forward)
-import LambdaGame.Resources (Backend(..), Window(..), Time, windowSize, Keyboard (..), Key (..), Mouse (..), TimeElapsed (TimeElapsed))
+import LambdaGame.Components (Text(..), Position(..), Color (..),
+  Sprite (..), Cube, HasXYZ(..), Rotation (..), Camera3D (..), forward, Sound (..))
+import LambdaGame.Resources (Backend(..), Window(..), Time, windowSize,
+  Keyboard (..), Key (..), Mouse (..), TimeElapsed (TimeElapsed))
 import LambdaGame.Scene (Scene, get, resource)
 import LambdaGame.Systems (system)
 import Control.Monad.IO.Class (liftIO)
 import Raylib.Core (clearBackground, initWindow, setTargetFPS, windowShouldClose,
-                    closeWindow, windowShouldClose, getFrameTime, beginDrawing, endDrawing, getScreenWidth, getScreenHeight, beginMode3D, endMode3D, isKeyDown, isKeyPressed, isKeyReleased, getMousePosition, getMouseDelta, hideCursor, disableCursor)
+                    closeWindow, windowShouldClose, getFrameTime, beginDrawing, endDrawing, getScreenWidth, getScreenHeight, beginMode3D, endMode3D, isKeyDown, isKeyPressed, isKeyReleased, getMousePosition, getMouseDelta, hideCursor, disableCursor, isMouseButtonDown, isMouseButtonPressed, isMouseButtonReleased)
 import Raylib.Core.Text (drawText)
 import Raylib.Util (WindowResources)
-import Raylib.Util.Colors (black, white)
+import Raylib.Util.Colors (black)
 import Data.Data (Proxy(..))
 import Control.Monad (when, filterM)
 import Data.Map.Strict (Map)
@@ -26,10 +28,11 @@ import Data.Maybe (fromMaybe)
 import qualified Data.Set as Set
 import Raylib.Util.RLGL (rlPushMatrix, rlPopMatrix, rlRotatef, rlTranslatef)
 import Data.List (sortOn)
+import Raylib.Core.Audio (loadSound, playSound, initAudioDevice)
 
 data Assets = Assets {
   textures :: Map String RL.Texture,
-  sounds :: Map String Int
+  sounds :: Map String RL.Sound
 }
 
 getTextureHandle :: String -> Scene RL.Texture
@@ -42,7 +45,21 @@ getTextureHandle fileName = do
       maybe (do handle <- liftIO $ loadTexture fileName
                 resource $ assets { textures = Map.insert fileName handle (textures assets)}
                 return handle)
-        return (Map.lookup fileName (textures assets))
+            return
+            (Map.lookup fileName (textures assets))
+
+getSoundHandle :: String -> Scene RL.Sound
+getSoundHandle fileName = do
+  maybeAssets <- get (Proxy @Assets)
+
+  case maybeAssets of
+    Nothing -> error "What"
+    (Just assets) -> do
+      maybe (do handle <- liftIO $ loadSound fileName
+                resource $ assets { sounds = Map.insert fileName handle (sounds assets)}
+                return handle)
+            return
+            (Map.lookup fileName (sounds assets))
 
 startRaylib :: Scene ()
 startRaylib = do
@@ -51,7 +68,13 @@ startRaylib = do
   resource (TimeElapsed 0)
   resource $ Assets { textures = Map.empty, sounds = Map.empty }
   resource $ Mouse { mousePos = (0, 0),
-                     mouseMovement = (0, 0)}
+                     mouseMovement = (0, 0),
+                     leftMouseDown = False,
+                     leftMousePressed = False,
+                     leftMouseReleased = False,
+                     rightMouseDown = False,
+                     rightMousePressed = False,
+                     rightMouseReleased = False }
   resource RL.Camera3D {
     RL.camera3D'position = V3 0 0 0,
     RL.camera3D'target = V3 0 0 1,
@@ -76,6 +99,7 @@ startRaylib = do
         initWindow (windowSize (screenWidth, screenHeight) win) (title win)
 
       liftIO $ setTargetFPS (targetFps win)
+      liftIO initAudioDevice
 
       when (captureCursor win) $ do
         liftIO hideCursor
@@ -91,6 +115,12 @@ updateTime = do
 
 addTime :: TimeElapsed -> Time -> TimeElapsed
 addTime (TimeElapsed t) d = TimeElapsed (t + d)
+
+getScale :: (Int, Int) -> Window -> Float
+getScale (screenW, screenH) win =
+  let (winW, _) = windowSize (screenW, screenH) win
+      (resW, _) = res win
+  in fromIntegral winW / fromIntegral resW
 
 data SpriteCommand = SpriteCommand {
   sprTexture :: RL.Texture,
@@ -108,13 +138,13 @@ recordSprites cmds (Sprite spr) pos = do
       screenW <- liftIO getScreenWidth
       screenH <- liftIO getScreenHeight
 
-      let scale = calculateScale (screenW, screenH) win
+      let scale = getScale (screenW, screenH) win
           texW = fromIntegral (RL.texture'width texture)
           texH = fromIntegral (RL.texture'height texture)
 
       resource $ SpriteCommand {
         sprTexture = texture,
-        sprPosition = V3 ((x pos) * scale) ((y pos) * scale) (z pos),
+        sprPosition = V3 (x pos * scale) (y pos * scale) (z pos),
         sprSize = V2 (texW * scale) (texH * scale)
       } : cmds
 
@@ -132,12 +162,6 @@ drawSprites cmds = do
                                           (x (sprSize cmd))
                                           (y (sprSize cmd)))
                             (V2 0 0) 0 (RL.Color 255 255 255 255)) sortedCmds
-
-calculateScale :: (Int, Int) -> Window -> Float
-calculateScale (screenW, screenH) win =
-  let (winW, _) = windowSize (screenW, screenH) win
-      (resW, _) = res win
-  in fromIntegral winW / fromIntegral resW
 
 drawTexts :: Text -> Position -> Color -> Scene ()
 drawTexts (Text text) pos color = do
@@ -171,11 +195,31 @@ drawCubes _ maybePos maybeColor maybeRot = do
       rlPopMatrix
       endMode3D
 
+playSounds :: Sound -> Scene Sound
+playSounds SoundPlayed = return SoundPlayed
+playSounds (Sound fileName) = do
+  sound <- getSoundHandle fileName
+  liftIO $ playSound sound
+  return SoundPlayed
+
 updateMouse :: Scene Mouse
 updateMouse = do
   (RL.Vector2 posX posY) <- liftIO getMousePosition
   (RL.Vector2 moveX moveY) <- liftIO getMouseDelta
-  return Mouse { mousePos = (posX, posY), mouseMovement = (moveX, moveY)}
+  leftDown <- liftIO $ isMouseButtonDown RL.MouseButtonLeft
+  leftPressed <- liftIO $ isMouseButtonPressed RL.MouseButtonLeft
+  leftReleased <- liftIO $ isMouseButtonReleased RL.MouseButtonLeft
+  rightDown <- liftIO $ isMouseButtonDown RL.MouseButtonRight
+  rightPressed <- liftIO $ isMouseButtonPressed RL.MouseButtonRight
+  rightReleased <- liftIO $ isMouseButtonReleased RL.MouseButtonRight
+  return Mouse { mousePos = (posX, posY),
+                 mouseMovement = (moveX, moveY),
+                 leftMouseDown = leftDown,
+                 leftMousePressed = leftPressed,
+                 leftMouseReleased = leftReleased,
+                 rightMouseDown = rightDown,
+                 rightMousePressed = rightPressed,
+                 rightMouseReleased = rightReleased}
 
 toRaylibKey :: Key -> RL.KeyboardKey
 toRaylibKey W = RL.KeyW
@@ -234,6 +278,9 @@ updateRaylib = do
       system drawTexts
       system drawCubes
       liftIO endDrawing
+
+      -- Sound
+      system playSounds
 
       -- Use Raylib's WindowShouldClose function to exit
       -- if escape is pressed or the close button is clicked

@@ -11,6 +11,7 @@ import Data.Typeable (Typeable)
 import Control.Monad (filterM, forM_)
 import Control.Monad.State.Strict hiding (get)
 import Data.Maybe (catMaybes)
+import Data.Vector.Mutable (IOVector)
 
 -- | Action for running a System
 system :: (SystemFilter f, SystemRunner f) => f -> Scene ()
@@ -43,7 +44,7 @@ instance {-# OVERLAPPABLE #-} (Typeable a) => SystemParam a where
     get (e, Proxy @a)
 
 
-instance {-# OVERLAPPING #-} (Typeable a) => SystemParam (Maybe a) where
+instance {-# OVERLAPS #-} (Typeable a) => SystemParam (Maybe a) where
   shouldRun _ = return True
   argumentFor e = do
     component <- get (e, Proxy @a)
@@ -101,12 +102,35 @@ class SystemResult r where
 
 instance {-# OVERLAPPABLE #-} (Typeable a, Typeable (ReturnType a)) => SystemResult a where
   handleResult a = do
-    set a
+    -- hack to create a component vector if
+    -- the result type hasn't been attached to
+    -- an entity in the normal way before
+    isRes <- isResource (Proxy @a)
+    if isRes then do
+      set a
+    else do
+      componentVec <- getComponentVec :: Scene (Maybe (IOVector (Maybe a)))
+      case componentVec of
+        Nothing -> do spawn a
+                      system (\(scroll :: a) -> do
+                        remove scroll
+                        despawn)
+                      set a
+        (Just _) -> set a
 
-instance {-# OVERLAPPING #-} (Typeable a, Typeable (ReturnType a)) => SystemResult (Scene a) where
+instance {-# OVERLAPPABLE #-} (Typeable a, Typeable (ReturnType a), SystemResult a) =>
+  SystemResult (Scene a) where
   handleResult a = do
     res <- a
-    set res
+    handleResult res
+
+instance {-# OVERLAPS #-} (Typeable a, Typeable (ReturnType a)) =>
+  SystemResult (Maybe a) where
+  handleResult a = do
+    case a of
+      Nothing -> return ()
+      (Just res) -> do
+        handleResult res
 
 allResources :: [Scene Bool] -> Scene Bool
 allResources resCheckers = do

@@ -1,6 +1,6 @@
 module LambdaGame.Resources (
     Backend(..), Window(..), WindowSize(..), windowSize,
-    Time, Key(..), Keyboard(..), Mouse(..), isKeyDown, TimeElapsed(..), wasPressed
+    Time, Key(..), Keyboard(..), Mouse(..), isPressed, TimeElapsed(..), wasPressed
 ) where
 
 import LambdaGame.Scene (Scene)
@@ -44,13 +44,19 @@ data Keyboard = Keyboard {
   releasedKeys :: Set.Set Key
 }
 
-isKeyDown :: Key -> Keyboard -> Bool
-isKeyDown key board = Set.member key (downKeys board)
+isPressed :: Key -> Keyboard -> Bool
+isPressed key board = Set.member key (downKeys board)
 
 wasPressed :: Keyboard -> Key -> Bool
 wasPressed board key = Set.member key (pressedKeys board)
 
 data Mouse = Mouse {
   mousePos :: (Float, Float),
-  mouseMovement :: (Float, Float)
+  mouseMovement :: (Float, Float),
+  leftMouseDown :: Bool,
+  leftMousePressed :: Bool,
+  leftMouseReleased :: Bool,
+  rightMouseDown :: Bool,
+  rightMousePressed :: Bool,
+  rightMouseReleased :: Bool
 } deriving Show
