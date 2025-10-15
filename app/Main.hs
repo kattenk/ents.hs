@@ -14,8 +14,8 @@ import Data.Data (Proxy(..))
 scrollSpeed = 55
 pipeGap = 50
 pipeRate = 1.2
-flapForce = -220
-gravityForce = 800
+flapForce = -210
+gravityForce = 820
 
 -- | Timer for spawning pipes
 newtype PipeTimer = PipeTimer Float
@@ -24,10 +24,10 @@ newtype PipeTimer = PipeTimer Float
 data Bird = Bird       -- ^ For the bird (when playing)
 data Gravity = Gravity -- ^ Affected by gravity
 data Ground = Ground   -- ^ For the ground
-data Pipe = Pipe       -- ^ For pipes
 data Tap = Tap         -- ^ Relating to the "Tap" graphic at the start of the game
+newtype Pipe = Pipe Bool -- ^ For pipes, the Bool is whether this pipe has been passed
 
-data Collider = Collider Float Float Float Float
+data Collider = Collider Float Float Float Float -- x y w h
 data Animation = Animation Float    -- ^ Anim speed
                            [String] -- ^ Frames
 
@@ -82,13 +82,13 @@ spawnPipes _ (PipeTimer timer) timeStep = do
       (pipeEndHeight + (pipeGap / 2),
        pipeSprHeight - (pipeEndHeight + (pipeGap / 2)))
 
-    spawn Pipe
+    spawn (Pipe False)
           (Sprite "pipeBottom.png")
           (Position 144 (gapCenterY + (pipeGap / 2)) 0.5)
           (Collider 0 0 26 200)
           (Velocity (-scrollSpeed) 0 0)
 
-    spawn Pipe
+    spawn (Pipe False)
           (Sprite "pipeTop.png")
           (Position 144 ((-pipeSprHeight) + (gapCenterY - (pipeGap / 2))) 0.5)
           (Collider 0 0 26 200)
@@ -137,6 +137,19 @@ startGame _ (Sprite spr) mouse keyboard =
       | spr == "tap.png" -> despawn
       | otherwise -> return ()
 
+score :: Pipe -> Position -> Scene Pipe
+score (Pipe False) pos =
+  if x pos < 28 then do
+    set (Sound "score.ogg")
+    return $ Pipe True
+  else do
+    return $ Pipe False
+score p _ = return p
+
+birdDive :: Bird -> Velocity -> Angle
+birdDive _ (Velocity 0 vy _)
+  = Angle (max (-30) (min 90 (vy * 0.3)))
+
 main :: IO ()
 main = do
   runGame $ do
@@ -164,6 +177,7 @@ main = do
     spawn Tap
           (Sprite "bird.png")
           (Position 20 116 1)
+          (Angle 360)
           (Collider 0 0 17 12)
           (Animation 0.1 ["birdFlapUp.png",
                           "bird.png",
@@ -181,8 +195,10 @@ main = do
       system scrollGround
       system flap
       system flapSound
+      system birdDive
       system spawnPipes
       system despawnPipes
       system updateColliders
       system collision
       system animate
+      system score

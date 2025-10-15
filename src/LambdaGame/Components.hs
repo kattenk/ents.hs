@@ -5,7 +5,7 @@
 module LambdaGame.Components (
   Position(Pos, Position), Rotation(Rot, Rotation), HasXYZ(..), Velocity(Vel, Velocity),
   yaw, pitch, roll, forward, right, Size(..),
-  Color(..), Text(..), Sprite(..), Cube(..), Camera3D(..), Sound(..)
+  Color(..), Text(..), Sprite(..), Cube(..), Camera3D(..), Sound(..), Angle(..)
 ) where
 
 import Linear.V3
@@ -63,6 +63,9 @@ forward rot = normalize (V3 (cos (degToRadians * pitch rot) * sin (degToRadians 
 
 right :: Rotation -> V3 Float
 right rot = normalize (cross (forward rot) (V3 0 1 0))
+
+-- For rotating Sprites
+newtype Angle = Angle Float
 
 {-# COMPLETE Position #-}
 pattern Position :: Float -> Float -> Float -> Position

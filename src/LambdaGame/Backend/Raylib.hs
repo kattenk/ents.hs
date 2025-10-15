@@ -4,7 +4,7 @@
 module LambdaGame.Backend.Raylib ( raylibBackend ) where
 
 import LambdaGame.Components (Text(..), Position(..), Color (..),
-  Sprite (..), Cube, HasXYZ(..), Rotation (..), Camera3D (..), forward, Sound (..))
+  Sprite (..), Cube, HasXYZ(..), Rotation (..), Camera3D (..), forward, Sound (..), Angle (..))
 import LambdaGame.Resources (Backend(..), Window(..), Time, windowSize,
   Keyboard (..), Key (..), Mouse (..), TimeElapsed (TimeElapsed))
 import LambdaGame.Scene (Scene, get, resource)
@@ -125,11 +125,12 @@ getScale (screenW, screenH) win =
 data SpriteCommand = SpriteCommand {
   sprTexture :: RL.Texture,
   sprPosition :: V3 Float,
-  sprSize :: V2 Float
+  sprSize :: V2 Float,
+  sprAngle :: Float
 }
 
-recordSprites :: [SpriteCommand] -> Sprite -> Position -> Scene ()
-recordSprites cmds (Sprite spr) pos = do
+recordSprites :: [SpriteCommand] -> Sprite -> Position -> Maybe Angle -> Scene ()
+recordSprites cmds (Sprite spr) pos angle = do
   maybeWin <- get (Proxy @Window)
   case maybeWin of
     Nothing -> return ()
@@ -145,7 +146,10 @@ recordSprites cmds (Sprite spr) pos = do
       resource $ SpriteCommand {
         sprTexture = texture,
         sprPosition = V3 (x pos * scale) (y pos * scale) (z pos),
-        sprSize = V2 (texW * scale) (texH * scale)
+        sprSize = V2 (texW * scale) (texH * scale),
+        sprAngle = case angle of
+          Nothing -> 0
+          (Just (Angle a)) -> a
       } : cmds
 
 drawSprites :: [SpriteCommand] -> Scene ()
@@ -157,11 +161,11 @@ drawSprites cmds = do
     liftIO $ drawTexturePro (sprTexture cmd)
                             (RL.Rectangle 0 0 (fromIntegral (RL.texture'width (sprTexture cmd)))
                                               (fromIntegral (RL.texture'height (sprTexture cmd))))
-                            (RL.Rectangle (x (sprPosition cmd))
-                                          (y (sprPosition cmd))
+                            (RL.Rectangle (x (sprPosition cmd) + (x (sprSize cmd) / 2))
+                                          (y (sprPosition cmd) + (y (sprSize cmd) / 2))
                                           (x (sprSize cmd))
                                           (y (sprSize cmd)))
-                            (V2 0 0) 0 (RL.Color 255 255 255 255)) sortedCmds
+                            (V2 (x (sprSize cmd) / 2) (y (sprSize cmd) / 2)) (sprAngle cmd) (RL.Color 255 255 255 255)) sortedCmds
 
 drawTexts :: Text -> Position -> Color -> Scene ()
 drawTexts (Text text) pos color = do
