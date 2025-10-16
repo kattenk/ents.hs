@@ -25,10 +25,10 @@ class ToFrame a where
 instance {-# OVERLAPPABLE #-} (a ~ ValueType a) => ToFrame a where
   getValueDurationEasing v = (v, Nothing, Nothing)
 
-instance (Real d) => ToFrame (a, d) where
+instance (d ~ Float) => ToFrame (a, d) where
   getValueDurationEasing (v, d) = (v, Just (realToFrac d), Nothing)
 
-instance (Real d) => ToFrame (a, d, Float -> Float) where
+instance (d ~ Float) => ToFrame (a, d, Float -> Float) where
   getValueDurationEasing (v, d, e) = (v, Just (realToFrac d), Just e)
 
 data Frame =
@@ -67,7 +67,9 @@ findCurrentFrame timeElapsed startTime animDuration frames numFrames =
     (frame:next) -> case frame of
       (Frame fr) ->
         let frameDuration = case getValueDurationEasing fr of
-              (_, d, _) -> fromMaybe (animDuration / fromIntegral numFrames) d in
+              (_, md, _) -> case md of
+                Nothing -> animDuration / fromIntegral numFrames
+                (Just d) -> animDuration * d in
         if timeElapsed < startTime + frameDuration then
           Just frame
         else
