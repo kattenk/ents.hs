@@ -109,21 +109,7 @@ class SystemResult r where
 
 instance {-# OVERLAPPABLE #-} (Typeable a, Typeable (ReturnType a)) => SystemResult a where
   handleResult a = do
-    -- hack to create a component vector if
-    -- the result type hasn't been attached to
-    -- an entity in the normal way before
-    isRes <- isResource (Proxy @a)
-    if isRes then do
-      set a
-    else do
-      componentVec <- getComponentVec :: Scene (Maybe (IOVector (Maybe a)))
-      case componentVec of
-        Nothing -> do spawn a
-                      system (\(scroll :: a) -> do
-                        remove scroll
-                        despawn)
-                      set a
-        (Just _) -> set a
+    set a
 
 instance {-# OVERLAPPABLE #-} (Typeable a, Typeable (ReturnType a), SystemResult a) =>
   SystemResult (Scene a) where
@@ -138,6 +124,13 @@ instance {-# OVERLAPS #-} (Typeable a, Typeable (ReturnType a)) =>
       Nothing -> return ()
       (Just res) -> do
         handleResult res
+
+-- Tuples -- can add more later
+instance {-# OVERLAPPABLE #-} (Typeable a, Typeable (ReturnType a), SystemResult a, SystemResult b) =>
+  SystemResult (a, b) where
+  handleResult (f, s) = do
+    handleResult f
+    handleResult s
 
 allResources :: [Scene Bool] -> Scene Bool
 allResources resCheckers = do

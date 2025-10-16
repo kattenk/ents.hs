@@ -65,7 +65,8 @@ library
                       LambdaGame.Resources,
                       LambdaGame.Components,
                       LambdaGame.Backend.Raylib,
-                      LambdaGame.Game
+                      LambdaGame.Game,
+                      LambdaGame.Animation
 
     -- Modules included in this rary but not exported.
     -- other-modules:

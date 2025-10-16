@@ -4,7 +4,7 @@
 module LambdaGame.Backend.Raylib ( raylibBackend ) where
 
 import LambdaGame.Components (Text(..), Position(..), Color (..),
-  Sprite (..), Cube, HasXYZ(..), Rotation (..), Camera3D (..), forward, Sound (..), Angle (..))
+  Sprite (..), Cube, HasXYZ(..), Rotation (..), Camera3D (..), forward, Sound (..), Angle (..), TextSize (..))
 import LambdaGame.Resources (Backend(..), Window(..), Time, windowSize,
   Keyboard (..), Key (..), Mouse (..), TimeElapsed (TimeElapsed))
 import LambdaGame.Scene (Scene, get, resource)
@@ -12,7 +12,7 @@ import LambdaGame.Systems (system)
 import Control.Monad.IO.Class (liftIO)
 import Raylib.Core (clearBackground, initWindow, setTargetFPS, windowShouldClose,
                     closeWindow, windowShouldClose, getFrameTime, beginDrawing, endDrawing, getScreenWidth, getScreenHeight, beginMode3D, endMode3D, isKeyDown, isKeyPressed, isKeyReleased, getMousePosition, getMouseDelta, hideCursor, disableCursor, isMouseButtonDown, isMouseButtonPressed, isMouseButtonReleased)
-import Raylib.Core.Text (drawText)
+import Raylib.Core.Text (drawText, measureText)
 import Raylib.Util (WindowResources)
 import Raylib.Util.Colors (black)
 import Data.Data (Proxy(..))
@@ -154,7 +154,7 @@ recordSprites cmds (Sprite spr) pos angle = do
 
 drawSprites :: [SpriteCommand] -> Scene ()
 drawSprites cmds = do
-  let sortedCmds = sortOn ((\(V3 _ _ z) -> z) . sprPosition) cmds
+  let sortedCmds = sortOn ((\(V3 _ _ z_) -> z_) . sprPosition) cmds
 -- DrawTexturePro(Texture2D texture, Rectangle source, Rectangle dest,
                -- Vector2 origin, float rotation, Color tint);
   mapM_ (\cmd -> do
@@ -167,12 +167,25 @@ drawSprites cmds = do
                                           (y (sprSize cmd)))
                             (V2 (x (sprSize cmd) / 2) (y (sprSize cmd) / 2)) (sprAngle cmd) (RL.Color 255 255 255 255)) sortedCmds
 
-drawTexts :: Text -> Position -> Color -> Scene ()
-drawTexts (Text text) pos color = do
-  liftIO $ do
-    drawText text (round (x pos)) (round (y pos)) 60
-      (toRaylibColor color)
-  return ()
+drawTexts :: Text -> Position -> Maybe Color -> Maybe TextSize -> Scene ()
+drawTexts (Text text) pos color maybeSize = do
+  maybeWin <- get (Proxy @Window)
+  case maybeWin of
+    Nothing -> return ()
+    Just win -> do
+      screenW <- liftIO getScreenWidth
+      screenH <- liftIO getScreenHeight
+
+      let scale = getScale (screenW, screenH) win
+          (TextSize textSize) = fromMaybe (TextSize 20) maybeSize
+          scaledSize = textSize * scale
+
+      liftIO $ do
+        textWidth <- measureText text (round scaledSize)
+        drawText text (round ((x pos * scale) - (fromIntegral textWidth / 2)))
+                      (round (y pos * scale)) (round scaledSize)
+          (toRaylibColor (fromMaybe (Color 255 255 255 255) color))
+      return ()
 
 toRaylibColor :: Color -> RL.Color
 toRaylibColor (Color r g b a) =

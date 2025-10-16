@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 module LambdaGame.Resources (
     Backend(..), Window(..), WindowSize(..), windowSize,
     Time, Key(..), Keyboard(..), Mouse(..), isPressed, TimeElapsed(..), wasPressed
@@ -6,6 +7,8 @@ module LambdaGame.Resources (
 import LambdaGame.Scene (Scene)
 import qualified Data.Set as Set
 import Data.Bifunctor
+import Data.Data (Typeable)
+import LambdaGame.Components (Sprite(..), Color (..))
 
 data Backend = Backend {
   startBackend :: Scene (),  -- ^ Startup action

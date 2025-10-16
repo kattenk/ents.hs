@@ -5,7 +5,7 @@
 module LambdaGame.Components (
   Position(Pos, Position), Rotation(Rot, Rotation), HasXYZ(..), Velocity(Vel, Velocity),
   yaw, pitch, roll, forward, right, Size(..),
-  Color(..), Text(..), Sprite(..), Cube(..), Camera3D(..), Sound(..), Angle(..)
+  Color(..), Text(..), Sprite(..), Cube(..), Camera3D(..), Sound(..), Angle(..), TextSize(..)
 ) where
 
 import Linear.V3
@@ -88,6 +88,7 @@ newtype Size = Size (V3 Float)
 
 data Color = Color Float Float Float Float
 newtype Text = Text String
+newtype TextSize = TextSize Float
 newtype Sprite = Sprite String
 data Sound = Sound String | SoundPlayed deriving Show
 

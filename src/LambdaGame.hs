@@ -5,6 +5,7 @@ module LambdaGame (
     module LambdaGame.Resources,
     module LambdaGame.Backend.Raylib,
     module LambdaGame.Game,
+    module LambdaGame.Animation,
     liftIO
 ) where
 
@@ -14,4 +15,5 @@ import LambdaGame.Components
 import LambdaGame.Resources
 import LambdaGame.Backend.Raylib
 import LambdaGame.Game
+import LambdaGame.Animation
 import Control.Monad.IO.Class (liftIO)
