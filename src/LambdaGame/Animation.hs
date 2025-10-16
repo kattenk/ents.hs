@@ -6,14 +6,11 @@
 {-# LANGUAGE TypeOperators #-}
 module LambdaGame.Animation (Frame(..), Animation(..), ToFrame(..), loop, animate) where
 import Data.Typeable (Typeable, typeOf)
-import LambdaGame.Scene (Scene)
 import LambdaGame.Systems
 import LambdaGame.Resources (TimeElapsed (TimeElapsed))
 import LambdaGame.Scene
 import Control.Monad.IO.Class (liftIO)
 import Data.List (nub)
-import Data.Maybe (fromMaybe)
-import Debug.Trace (trace)
 import Data.Fixed (mod')
 
 type family ValueType t where
@@ -37,11 +34,7 @@ data Frame =
   forall a. (Typeable a, Typeable (ReturnType a),
              ToFrame a,
              Typeable (ValueType a),
-             Typeable (ReturnType (ValueType a)),
-             Show a) => Frame a
-
-instance Show Frame where
-  show (Frame a) = show a
+             Typeable (ReturnType (ValueType a))) => Frame a
 
 instance Eq Frame where
   Frame a == Frame b = typeOf a == typeOf b
@@ -74,7 +67,7 @@ runAnims anim (Animating startTime) (TimeElapsed timeElapsed) = do
     where
       timeInAnimation :: Float
       timeInAnimation = (timeElapsed - startTime) `mod'` abs (duration anim)
-      
+
       isLooping :: Bool
       isLooping = duration anim < 0
 
@@ -91,7 +84,7 @@ runAnims anim (Animating startTime) (TimeElapsed timeElapsed) = do
             getFrameDuration (Frame a) =
               case getValueDurationEasing a of
                 (_, d, _) -> defaultFrameDuration d
-            
+
             -- Get the current (first, next) frame pair
             getCurrentFramePair :: Float -> [Frame] -> Maybe (Frame, Frame)
             getCurrentFramePair startTime' processFrames =
@@ -103,23 +96,20 @@ runAnims anim (Animating startTime) (TimeElapsed timeElapsed) = do
                     Just (frame, case next of
                                    [] -> if isLooping then
                                            case trackFrames of
-                                             (x:xs) -> x
+                                             (x:_) -> x
                                              [] -> frame
                                          else frame
-                                   (x:xs) -> x)
+                                   (x:_) -> x)
                   else
                     getCurrentFramePair (startTime' + getFrameDuration frame) next
-        
-        liftIO $ putStrLn $ "frame pair: "
-          ++ show (getCurrentFramePair startTime trackFrames)
-        -- case currentFrame of
-        --   Just (Frame fr) ->
-        --     (case getValueDurationEasing fr of
-        --       (v, _, _) -> do
-        --         curEnt <- currentEnt
-        --         set (curEnt, v))
-        --   Nothing -> return ()
-        -- return ()
+      
+        case getCurrentFramePair startTime trackFrames of
+          (Just (Frame this, Frame next)) -> do
+            let (value, _, easing) = getValueDurationEasing this
+            curEnt <- currentEnt
+            set (curEnt, value)
+          -- Not animating
+          Nothing -> return ()
 
 animate :: Scene ()
 animate = do
