@@ -13,6 +13,8 @@ import LambdaGame.Scene
 import Control.Monad.IO.Class (liftIO)
 import Data.List (nub)
 import Data.Maybe (fromMaybe)
+import Debug.Trace (trace)
+import Data.Fixed (mod')
 
 type family ValueType t where
   ValueType (a, _, _) = a
@@ -35,7 +37,11 @@ data Frame =
   forall a. (Typeable a, Typeable (ReturnType a),
              ToFrame a,
              Typeable (ValueType a),
-             Typeable (ReturnType (ValueType a))) => Frame a
+             Typeable (ReturnType (ValueType a)),
+             Show a) => Frame a
+
+instance Show Frame where
+  show (Frame a) = show a
 
 instance Eq Frame where
   Frame a == Frame b = typeOf a == typeOf b
@@ -60,40 +66,60 @@ startAnims _ _ (TimeElapsed t) =
 cleanupAnimating :: Animating -> Not Animation -> Scene ()
 cleanupAnimating a _ = remove a
 
-findCurrentFrame :: Float -> Float -> Float -> [Frame] -> Int -> Maybe Frame
-findCurrentFrame timeElapsed startTime animDuration frames numFrames =
-  case frames of
-    [] -> Nothing
-    (frame:next) -> case frame of
-      (Frame fr) ->
-        let frameDuration = case getValueDurationEasing fr of
-              (_, md, _) -> case md of
-                Nothing -> animDuration / fromIntegral numFrames
-                (Just d) -> animDuration * d in
-        if timeElapsed < startTime + frameDuration then
-          Just frame
-        else
-          findCurrentFrame timeElapsed (startTime + frameDuration) animDuration next numFrames
-
 runAnims :: Animation -> Animating -> TimeElapsed -> Scene ()
 runAnims anim (Animating startTime) (TimeElapsed timeElapsed) = do
   -- Find all the unique components involved in the animation,
   -- and 'set' them to their correct values at this point in time
   mapM_ runAnimationTrack (nub (frames anim))
     where
+      timeInAnimation :: Float
+      timeInAnimation = (timeElapsed - startTime) `mod'` abs (duration anim)
+      
+      isLooping :: Bool
+      isLooping = duration anim < 0
+
       runAnimationTrack (Frame a) = do
         -- Find all the frames of this component
-        let trackFrames = filter (\(Frame b) -> Frame a == Frame b) (frames anim)
-            currentFrame = findCurrentFrame timeElapsed startTime (duration anim) trackFrames (length trackFrames)
+        let trackFrames :: [Frame]
+            trackFrames = filter (\(Frame b) -> Frame a == Frame b) (frames anim)
+
+            defaultFrameDuration :: Maybe Float -> Float
+            defaultFrameDuration (Just d) = abs (duration anim) * d
+            defaultFrameDuration Nothing = abs (duration anim) / fromIntegral (length trackFrames)
+
+            getFrameDuration :: Frame -> Float
+            getFrameDuration (Frame a) =
+              case getValueDurationEasing a of
+                (_, d, _) -> defaultFrameDuration d
+            
+            -- Get the current (first, next) frame pair
+            getCurrentFramePair :: Float -> [Frame] -> Maybe (Frame, Frame)
+            getCurrentFramePair startTime' processFrames =
+              case processFrames of
+                [] -> Nothing
+                (frame:next) ->
+                  if (if isLooping then timeInAnimation else timeElapsed)
+                        < (startTime' + getFrameDuration frame) then
+                    Just (frame, case next of
+                                   [] -> if isLooping then
+                                           case trackFrames of
+                                             (x:xs) -> x
+                                             [] -> frame
+                                         else frame
+                                   (x:xs) -> x)
+                  else
+                    getCurrentFramePair (startTime' + getFrameDuration frame) next
         
-        case currentFrame of
-          Just (Frame fr) ->
-            (case getValueDurationEasing fr of
-              (v, _, _) -> do
-                curEnt <- currentEnt
-                set (curEnt, v))
-          Nothing -> return ()
-        return ()
+        liftIO $ putStrLn $ "frame pair: "
+          ++ show (getCurrentFramePair startTime trackFrames)
+        -- case currentFrame of
+        --   Just (Frame fr) ->
+        --     (case getValueDurationEasing fr of
+        --       (v, _, _) -> do
+        --         curEnt <- currentEnt
+        --         set (curEnt, v))
+        --   Nothing -> return ()
+        -- return ()
 
 animate :: Scene ()
 animate = do
