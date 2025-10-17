@@ -4,14 +4,43 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module LambdaGame.Animation (Frame(..), Animation(..), ToFrame(..), loop, animate) where
-import Data.Typeable (Typeable, typeOf)
+import Data.Typeable (Typeable, typeOf, cast)
 import LambdaGame.Systems
 import LambdaGame.Resources (TimeElapsed (TimeElapsed))
 import LambdaGame.Scene
 import Control.Monad.IO.Class (liftIO)
 import Data.List (nub)
 import Data.Fixed (mod')
+import Control.Monad (when)
+import LambdaGame.Components (Color(..), Position (..), HasXYZ (..), Rotation)
+import Data.Maybe (fromMaybe)
+import Linear (Additive(lerp), V3 (..))
+import qualified Debug.Trace as Debug
+import Debug.Trace (trace)
+
+class Animatable a where
+  tween :: a     -- ^ Start value
+        -> a     -- ^ End value
+        -> Float -- ^ Progress
+        -> a     -- ^ Result
+
+instance Animatable a where
+  tween a _ _ = a
+
+instance {-# OVERLAPPING #-} Animatable Position where
+  tween p1 p2 progress =
+    fromV3 (lerp progress (toV3 p1) (toV3 p2))
+
+instance {-# OVERLAPPING #-} Animatable Color where
+  tween p1 p2 progress =
+    fromV3 (lerp progress (toV3 p1) (toV3 p2))
+
+instance {-# OVERLAPPING #-} Animatable Rotation where
+  tween p1 p2 progress =
+    fromV3 (lerp progress (toV3 p1) (toV3 p2))
 
 type family ValueType t where
   ValueType (a, _, _) = a
@@ -31,10 +60,11 @@ instance (d ~ Float) => ToFrame (a, d, Float -> Float) where
   getValueDurationEasing (v, d, e) = (v, Just (realToFrac d), Just e)
 
 data Frame =
-  forall a. (Typeable a, Typeable (ReturnType a),
+  forall a. (Typeable a,
              ToFrame a,
              Typeable (ValueType a),
-             Typeable (ReturnType (ValueType a))) => Frame a
+             Typeable (ReturnType (ValueType a)),
+             Animatable (ValueType a)) => Frame a
 
 instance Eq Frame where
   Frame a == Frame b = typeOf a == typeOf b
@@ -63,13 +93,16 @@ runAnims :: Animation -> Animating -> TimeElapsed -> Scene ()
 runAnims anim (Animating startTime) (TimeElapsed timeElapsed) = do
   -- Find all the unique components involved in the animation,
   -- and 'set' them to their correct values at this point in time
-  mapM_ runAnimationTrack (nub (frames anim))
+  when stillAnimating $ mapM_ runAnimationTrack (nub (frames anim))
     where
       timeInAnimation :: Float
       timeInAnimation = (timeElapsed - startTime) `mod'` abs (duration anim)
 
       isLooping :: Bool
       isLooping = duration anim < 0
+
+      stillAnimating :: Bool
+      stillAnimating = isLooping || ((timeElapsed - startTime) < duration anim)
 
       runAnimationTrack (Frame a) = do
         -- Find all the frames of this component
@@ -85,9 +118,9 @@ runAnims anim (Animating startTime) (TimeElapsed timeElapsed) = do
               case getValueDurationEasing a of
                 (_, d, _) -> defaultFrameDuration d
 
-            -- Get the current (first, next) frame pair
-            getCurrentFramePair :: Float -> [Frame] -> Maybe (Frame, Frame)
-            getCurrentFramePair startTime' processFrames =
+            -- Get the current (first, next, progress) triplet
+            getCurrentFrameInfo :: Float -> [Frame] -> Maybe (Frame, Frame, Float)
+            getCurrentFrameInfo startTime' processFrames =
               case processFrames of
                 [] -> Nothing
                 (frame:next) ->
@@ -99,17 +132,26 @@ runAnims anim (Animating startTime) (TimeElapsed timeElapsed) = do
                                              (x:_) -> x
                                              [] -> frame
                                          else frame
-                                   (x:_) -> x)
+                                   (x:_) -> x,
+                                 (timeInAnimation - startTime') / getFrameDuration frame)
                   else
-                    getCurrentFramePair (startTime' + getFrameDuration frame) next
-      
-        case getCurrentFramePair startTime trackFrames of
-          (Just (Frame this, Frame next)) -> do
-            let (value, _, easing) = getValueDurationEasing this
+                    getCurrentFrameInfo (startTime' + getFrameDuration frame) next
+
+        case getCurrentFrameInfo startTime trackFrames of
+          (Just (Frame this, Frame next, progress :: Float)) -> do
+            let (curVal, _, _) = getValueDurationEasing this
+                (nextVal, _, maybeEasing) = getValueDurationEasing next
+                easing = fromMaybe id maybeEasing
             curEnt <- currentEnt
-            set (curEnt, value)
+
+            case cast nextVal of
+              (Just castedNext) -> do
+                let value = tween curVal castedNext (easing progress)
+                set (curEnt, value)
+              Nothing -> return ()
           -- Not animating
           Nothing -> return ()
+
 
 animate :: Scene ()
 animate = do
