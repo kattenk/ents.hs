@@ -39,29 +39,29 @@ instance HasXYZ Position where
   x (Pos (V3 x_ _ _)) = x_
   y (Pos (V3 _ y_ _)) = y_
   z (Pos (V3 _ _ z_)) = z_
-  toV3 (Pos (V3 x y z)) = V3 x y z
-  fromV3 (V3 x y z) = Position x y z
+  toV3 (Pos (V3 x_ y_ z_)) = V3 x_ y_ z_
+  fromV3 (V3 x_ y_ z_) = Position x_ y_ z_
 
 instance HasXYZ Rotation where
   x (Rot (V3 x_ _ _)) = x_
   y (Rot (V3 _ y_ _)) = y_
   z (Rot (V3 _ _ z_)) = z_
-  toV3 (Rot (V3 x y z)) = V3 x y z
-  fromV3 (V3 x y z) = Rotation x y z
+  toV3 (Rot (V3 x_ y_ z_)) = V3 x_ y_ z_
+  fromV3 (V3 x_ y_ z_) = Rotation x_ y_ z_
 
 instance HasXYZ Velocity where
   x (Vel (V3 x_ _ _)) = x_
   y (Vel (V3 _ y_ _)) = y_
   z (Vel (V3 _ _ z_)) = z_
-  toV3 (Vel (V3 x y z)) = V3 x y z
-  fromV3 (V3 x y z) = Velocity x y z
+  toV3 (Vel (V3 x_ y_ z_)) = V3 x_ y_ z_
+  fromV3 (V3 x_ y_ z_) = Velocity x_ y_ z_
 
 instance HasXYZ Color where
   x (Color' (V4 x_ _ _ _)) = x_
   y (Color' (V4 _ y_ _ _)) = y_
   z (Color' (V4 _ _ z_ _)) = z_
-  toV3 (Color' (V4 x y z _)) = V3 x y z
-  fromV3 (V3 x y z) = Color x y z 255
+  toV3 (Color' (V4 x_ y_ z_ _)) = V3 x_ y_ z_
+  fromV3 (V3 x_ y_ z_) = Color x_ y_ z_ 255
 
 {-# COMPLETE Position #-}
 pattern Position :: Float -> Float -> Float -> Position
@@ -86,8 +86,8 @@ instance HasXYZ (V2 Float) where
   x (V2 x_ _) = x_
   y (V2 _ y_) = y_
   z (V2 _  _) = 0
-  toV3 (V2 x y) = V3 x y 0
-  fromV3 (V3 x y _) = V2 x y
+  toV3 (V2 x_ y_) = V3 x_ y_ 0
+  fromV3 (V3 x_ y_ _) = V2 x_ y_
 
 yaw :: Rotation -> Float
 yaw (Rot (V3 x_ _ _)) = x_

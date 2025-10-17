@@ -12,14 +12,11 @@ import LambdaGame.Systems
 import LambdaGame.Resources (TimeElapsed (TimeElapsed))
 import LambdaGame.Scene
 import Control.Monad.IO.Class (liftIO)
-import Data.List (nub, (!?), findIndex)
+import Data.List (nub, findIndex, (!?))
 import Data.Fixed (mod')
-import Control.Monad (when)
 import LambdaGame.Components (Color(..), Position (..), HasXYZ (..), Rotation)
 import Data.Maybe (fromMaybe)
-import Linear (Additive(lerp), V3 (..))
-import Debug.Trace (trace)
-import Data.Function ((&))
+import Linear (Additive(lerp))
 
 class Animatable a where
   tween :: a     -- ^ Start value
@@ -87,9 +84,9 @@ cleanupAnimating a _ = remove a
 
 runAnims :: Animation -> Animating -> TimeElapsed -> Scene ()
 runAnims (Animation { frames = [] }) _ _ = return ()
-runAnims anim@(Animation { frames = (_firstFrame:_) }) (Animating startTime') (TimeElapsed timeElapsed) = do
+runAnims anim@(Animation { frames = (firstFrame:_) }) (Animating startTime') (TimeElapsed timeElapsed) = do
   -- Find all the unique components involved in the animation,
-  -- and 'set' them to their correct values at this point in time
+  -- and set them to their correct values at this point in time
   if stillAnimating then do mapM_ runAnimationTrack (nub (frames anim)) else
     remove anim
     where
@@ -112,7 +109,10 @@ runAnims anim@(Animation { frames = (_firstFrame:_) }) (Animating startTime') (T
           (Just castedNext) -> do
             curEnt <- currentEnt
             set (curEnt, tween currentValue castedNext (progress * 0.01))
-          Nothing -> liftIO $ print "what"
+          Nothing -> return ()
+
+      divisions :: Int -> [Float]
+      divisions n = [ fromIntegral i * 100 / fromIntegral n | i <- [0..n] ]
 
       runAnimationTrack :: Frame -> Scene ()
       runAnimationTrack (Frame a) = do
@@ -120,20 +120,23 @@ runAnims anim@(Animation { frames = (_firstFrame:_) }) (Animating startTime') (T
         let allFrames = zip [0 ..] (filter (\(Frame b) -> Frame a == Frame b) (frames anim))
             percentages = map (\(index, Frame b) -> case toFrame b of
               (Just p, _) -> p
-              (Nothing, _) -> (100 / fromIntegral (length allFrames)) * index) allFrames
+              (Nothing, _) -> divisions (length allFrames - 1) !! index) allFrames
             trackFrames = zip percentages (map snd allFrames)
+            firstFrame' = (fst (fromMaybe (0, firstFrame) $ trackFrames !? 0), firstFrame)
+            
             (previousFrames, nextFrames)
               = splitAt (fromMaybe 0 $ findIndex ((> animationPercentage) . fst) trackFrames) trackFrames
 
             currentFrame = case previousFrames of
-              [] -> error "no previous frames"
+              [] -> snd firstFrame'
               l -> snd (last l)
 
             nextFrame = case nextFrames of
-              [] -> error "no previous frames"
+              [] -> snd firstFrame'
               (f:_) -> snd f
 
-            progress = (animationPercentage - fst (last previousFrames)) / (fst (head nextFrames) - fst (last previousFrames)) * 100
+            progress = (animationPercentage - fst (last previousFrames))
+                          / (fst (head nextFrames) - fst (last previousFrames)) * 100
 
         applyAnimation currentFrame nextFrame progress
 

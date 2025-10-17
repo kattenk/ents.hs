@@ -11,7 +11,6 @@ import Data.Typeable (Typeable)
 import Control.Monad (filterM, forM_)
 import Control.Monad.State.Strict hiding (get)
 import Data.Maybe (catMaybes)
-import Data.Vector.Mutable (IOVector)
 
 -- | Action for running a System
 system :: (SystemFilter f, SystemRunner f) => f -> Scene ()
