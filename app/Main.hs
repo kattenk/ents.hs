@@ -35,9 +35,11 @@ main = do
 
     spawn (Position 0 0 5)
           (Cube)
-          (Animation [Frame (Position 0 2 5, 0.3, sineEase),
-                      Frame (Position 0 0 5, 0.3, sineEase),
-                      Frame (Position 0 (-2) 5, 0.3, sineEase)] (-1))
+          (Animation [Frame (Position 0 2 5, 0.5, sineEase),
+                      Frame (Position 1 0 5, 0.5, sineEase),
+                      Frame (Position 0 (-2) 5, 0.5, sineEase),
+                      Frame (Color 255 100 0 255),
+                      Frame (Color 0 0 255 255)] (-1))
 
     gameLoop $ do
       system animate
