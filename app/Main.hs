@@ -12,9 +12,6 @@ import Data.Data (Proxy(..))
 import Data.Dynamic (Typeable)
 import Linear (Additive(lerp))
 
-sineEase :: Float -> Float
-sineEase x = sin (x * 2)
-
 main :: IO ()
 main = do
   runGame $ do
@@ -33,13 +30,24 @@ main = do
     let z = lerp (-1) x y
     liftIO $ print z
 
+    spawn (Position 1 0 5)
+          (Cube)
+          (Color 255 0 0 255)
+
+    spawn (Position 1 3 5)
+          (Cube)
+          (Color 0 255 0 255)
+
     spawn (Position 0 0 5)
           (Cube)
-          (Animation [Frame (Position 0 2 5, 0.5, sineEase),
-                      Frame (Position 1 0 5, 0.5, sineEase),
-                      Frame (Position 0 (-2) 5, 0.5, sineEase),
-                      Frame (Color 255 100 0 255),
-                      Frame (Color 0 0 255 255)] (-1))
+          (Animation [Frame (0, Position 0 0 5),
+                      Frame (25, Position 0 (-1) 5),
+                      Frame (50, Position 0 1 5),
+                      Frame (75, Position 0 2 5),
+                      Frame (100, Position 0 0 5),
+                      Frame (0, Color 0 0 255 255),
+                      Frame (50, Color 255 0 0 255),
+                      Frame (100, Color 0 0 255 255)] (1))
 
     gameLoop $ do
       system animate
