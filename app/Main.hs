@@ -4,7 +4,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module Main (main) where
-import LambdaGame
+import qualified LambdaGame as LG
 import Control.Monad (when)
 import System.Random (randomRIO)
 import Linear.V3 (V3 (..))
@@ -12,37 +12,56 @@ import Data.Data (Proxy(..))
 import Data.Dynamic (Typeable)
 import Linear (Additive(lerp))
 
+data Animation = Animation Float    -- ^ Anim speed
+                           [String] -- ^ Frames
+
+animate :: LG.Sprite -> Animation -> LG.TimeElapsed -> LG.Sprite
+animate (LG.Sprite spr) (Animation speed frames) (LG.TimeElapsed elapsed) =
+  let currentFrame = floor (elapsed / speed) `mod` length frames
+  in LG.Sprite (frames !! currentFrame)
+
 main :: IO ()
 main = do
-  runGame $ do
-    resource $ Window {
-      title = "Flappy",
-      res = (144, 256),
-      size = Automatic,
-      targetFps = 300,
-      captureCursor = False,
-      backend = raylibBackend,
-      exit = False
+  LG.runGame $ do
+    LG.resource $ LG.Window {
+      LG.title = "Flappy",
+      LG.res = (144, 256),
+      LG.size = LG.Automatic,
+      LG.targetFps = 300,
+      LG.captureCursor = False,
+      LG.backend = LG.raylibBackend,
+      LG.exit = False
     }
 
     let x = V3 0 0 0
     let y = V3 0 5 0
     let z = lerp (-1) x y
-    liftIO $ print z
+    LG.liftIO $ print z
 
-    spawn (Position 1 0 5)
-          (Cube)
-          (Color 255 0 0 255)
+    LG.spawn (LG.Position 1 0 5)
+          (LG.Cube)
+          (LG.Color 255 0 0 255)
 
-    spawn (Position 1 3 5)
-          (Cube)
-          (Color 0 255 0 255)
+    LG.spawn (LG.Position 1 3 5)
+          (LG.Cube)
+          (LG.Color 0 255 0 255)
 
-    spawn (Position 0 0 5)
-          (Cube)
-          (Animation [Frame (0, Position 0 0 5),
-                      Frame (50, Position 0 3 5),
-                      Frame (100, Position 0 0 5)] (-1))
+    LG.spawn (LG.Position 40 80 5)
+          (LG.Cube)
 
-    gameLoop $ do
-      system animate
+          (LG.Animation [LG.Frame (LG.Sprite "birdFlapUp.png"),
+                      LG.Frame (LG.Sprite "bird.png"),
+                      LG.Frame (LG.Sprite "birdFlapDown.png"),
+                      LG.Frame (LG.Sprite "bird.png")] (-0.4))
+    
+    LG.spawn
+      (LG.Position 60 80 5)
+      (LG.Sprite "bird.png")
+      (Animation 0.1 ["birdFlapUp.png",
+                             "bird.png",
+                             "birdFlapDown.png",
+                             "bird.png"])
+
+    LG.gameLoop $ do
+      LG.system LG.animate
+      LG.system animate

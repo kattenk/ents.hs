@@ -26,8 +26,12 @@ class Animatable a where
         -> Float -- ^ Progress
         -> a     -- ^ Result
 
+  stepped :: a -> Bool
+  stepped _ = False
+
 instance Animatable a where
-  tween a _ _ = a
+  tween a b progress = a
+  stepped _ = True
 
 instance {-# OVERLAPPING #-} Animatable Position where
   tween p1 p2 progress =
@@ -92,7 +96,7 @@ runAnims :: Animation -> Animating -> TimeElapsed -> Scene ()
 runAnims anim (Animating startTime') (TimeElapsed timeElapsed) = do
   -- Find all the unique components involved in the animation,
   -- and set them to their correct values at this point in time
-  if stillAnimating then do mapM_ (fromMaybe (return ()) . runAnimationTrack) (nub (frames anim)) else
+  if stillAnimating then do mapM_ runAnimationTrack (nub (frames anim)) else
     remove anim
     where
       animationPercentage :: Float
@@ -119,23 +123,29 @@ runAnims anim (Animating startTime') (TimeElapsed timeElapsed) = do
             set (curEnt, tween currentValue castedNext (progress * 0.01))
           Nothing -> return ()
 
-      runAnimationTrack :: Frame -> Maybe (Scene ())
+      runAnimationTrack :: Frame -> Scene ()
       runAnimationTrack (Frame a) = do
         let trackFrames = filter (\(Frame b) -> Frame a == Frame b) (frames anim)
             framesWithTimes = zipWith (curry (\(index, f@(Frame b)) ->
                 (case time b of
                   (Just t) -> t
-                  Nothing -> divisions (length trackFrames - 1) !! index, f))) [0..] trackFrames
+                  Nothing -> if stepped b then
+                              100 / fromIntegral (length trackFrames) * fromIntegral index
+                             else
+                              -- this may be wrong I messed with it
+                              divisions (length trackFrames - 1) !! index, f))) [0..] trackFrames
             previousFrames = filter ((< animationPercentage) . fst) framesWithTimes
             nextFrames     = filter ((> animationPercentage) . fst) framesWithTimes
 
-        (frameStart, currentFrame) <- previousFrames !? (length previousFrames - 1)
-        (frameEnd, nextFrame) <- nextFrames !? 0
-        
-        let progress = (animationPercentage - frameStart)
-                          / (frameEnd - frameStart) * 100
-        
-        return (do applyAnimation currentFrame nextFrame progress)
+        case framesWithTimes !? 0 of
+          (Just firstFrame) ->
+            let (frameStart, currentFrame) = fromMaybe firstFrame $ previousFrames !? (length previousFrames - 1)
+                (frameEnd, nextFrame) = fromMaybe firstFrame $ nextFrames !? 0
+                progress = (animationPercentage - frameStart)
+                              / (frameEnd - frameStart) * 100 in
+
+            applyAnimation currentFrame nextFrame progress
+          Nothing -> return ()
 
 animate :: Scene ()
 animate = do
