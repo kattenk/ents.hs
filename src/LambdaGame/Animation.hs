@@ -5,8 +5,10 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Redundant case" #-}
 
-module LambdaGame.Animation (Frame(..), Animation(..), ToFrame(..), loop, animate) where
+module LambdaGame.Animation (Frame(..), Animation(..), FrameSpec(..), loop, animate) where
 import Data.Typeable (Typeable, typeOf, cast)
 import LambdaGame.Systems
 import LambdaGame.Resources (TimeElapsed (TimeElapsed))
@@ -43,20 +45,24 @@ type family ValueType t where
   ValueType (Float, a) = a
   ValueType a = a
 
-class ToFrame a where
-  toFrame :: a -> (Maybe Float, ValueType a)
+class FrameSpec a where
+  time :: a -> Maybe Float
+  value :: a -> ValueType a
 
-instance {-# OVERLAPPABLE #-} (a ~ ValueType a) => ToFrame a where
-  toFrame v = (Nothing, v)
+instance {-# OVERLAPPABLE #-} (a ~ ValueType a) => FrameSpec a where
+  time _ = Nothing
+  value a = a
 
-instance (p ~ Float) => ToFrame (p, a) where
-  toFrame (p, a) = (Just p, a)
+instance (t ~ Float) => FrameSpec (t, a) where
+  time (t, _) = Just t
+  value (_, a) = a
 
 data Frame =
   forall a. (Typeable a,
-             ToFrame a,
+             FrameSpec a,
              Typeable (ValueType a),
              Typeable (ReturnType (ValueType a)),
+             Typeable (ReturnType a),
              Animatable (ValueType a)) => Frame a
 
 instance Eq Frame where
@@ -83,11 +89,10 @@ cleanupAnimating :: Animating -> Not Animation -> Scene ()
 cleanupAnimating a _ = remove a
 
 runAnims :: Animation -> Animating -> TimeElapsed -> Scene ()
-runAnims (Animation { frames = [] }) _ _ = return ()
-runAnims anim@(Animation { frames = (firstFrame:_) }) (Animating startTime') (TimeElapsed timeElapsed) = do
+runAnims anim (Animating startTime') (TimeElapsed timeElapsed) = do
   -- Find all the unique components involved in the animation,
   -- and set them to their correct values at this point in time
-  if stillAnimating then do mapM_ runAnimationTrack (nub (frames anim)) else
+  if stillAnimating then do mapM_ (fromMaybe (return ()) . runAnimationTrack) (nub (frames anim)) else
     remove anim
     where
       animationPercentage :: Float
@@ -100,10 +105,13 @@ runAnims anim@(Animation { frames = (firstFrame:_) }) (Animating startTime') (Ti
       stillAnimating :: Bool
       stillAnimating = isLooping || ((timeElapsed - startTime') < duration anim)
 
+      divisions :: Int -> [Float]
+      divisions n = [ fromIntegral i * 100 / fromIntegral n | i <- [0..n] ]
+
       applyAnimation :: Frame -> Frame -> Float -> Scene ()
       applyAnimation (Frame currentFrame) (Frame nextFrame) progress = do
-        let (_, currentValue) = toFrame currentFrame
-            (_, nextVal) = toFrame nextFrame
+        let currentValue = value currentFrame
+            nextVal = value nextFrame
 
         case cast nextVal of
           (Just castedNext) -> do
@@ -111,34 +119,23 @@ runAnims anim@(Animation { frames = (firstFrame:_) }) (Animating startTime') (Ti
             set (curEnt, tween currentValue castedNext (progress * 0.01))
           Nothing -> return ()
 
-      divisions :: Int -> [Float]
-      divisions n = [ fromIntegral i * 100 / fromIntegral n | i <- [0..n] ]
-
-      runAnimationTrack :: Frame -> Scene ()
+      runAnimationTrack :: Frame -> Maybe (Scene ())
       runAnimationTrack (Frame a) = do
-        -- Find all the frames of this component
-        let allFrames = zip [0 ..] (filter (\(Frame b) -> Frame a == Frame b) (frames anim))
-            percentages = map (\(index, Frame b) -> case toFrame b of
-              (Just p, _) -> p
-              (Nothing, _) -> divisions (length allFrames - 1) !! index) allFrames
-            trackFrames = zip percentages (map snd allFrames)
-            firstFrame' = (fst (fromMaybe (0, firstFrame) $ trackFrames !? 0), firstFrame)
-            
-            (previousFrames, nextFrames)
-              = splitAt (fromMaybe 0 $ findIndex ((> animationPercentage) . fst) trackFrames) trackFrames
+        let trackFrames = filter (\(Frame b) -> Frame a == Frame b) (frames anim)
+            framesWithTimes = zipWith (curry (\(index, f@(Frame b)) ->
+                (case time b of
+                  (Just t) -> t
+                  Nothing -> divisions (length trackFrames - 1) !! index, f))) [0..] trackFrames
+            previousFrames = filter ((< animationPercentage) . fst) framesWithTimes
+            nextFrames     = filter ((> animationPercentage) . fst) framesWithTimes
 
-            currentFrame = case previousFrames of
-              [] -> snd firstFrame'
-              l -> snd (last l)
-
-            nextFrame = case nextFrames of
-              [] -> snd firstFrame'
-              (f:_) -> snd f
-
-            progress = (animationPercentage - fst (last previousFrames))
-                          / (fst (head nextFrames) - fst (last previousFrames)) * 100
-
-        applyAnimation currentFrame nextFrame progress
+        (frameStart, currentFrame) <- previousFrames !? (length previousFrames - 1)
+        (frameEnd, nextFrame) <- nextFrames !? 0
+        
+        let progress = (animationPercentage - frameStart)
+                          / (frameEnd - frameStart) * 100
+        
+        return (do applyAnimation currentFrame nextFrame progress)
 
 animate :: Scene ()
 animate = do
