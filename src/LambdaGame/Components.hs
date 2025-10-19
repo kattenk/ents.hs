@@ -5,9 +5,9 @@
 module LambdaGame.Components (
   Position(Pos, Position), Rotation(Rot, Rotation),
   HasXYZ(..), Velocity(Vel, Velocity),
-  yaw, pitch, roll, forward, right, Size(..),
+  yaw, pitch, roll, forward, right, Size(Size', Size),
   Color(Color', Color), Text(..), TextAlignment(..), Font(..),
-  Sprite(..), Cube(..), Camera3D(..), Sound(..), Angle(..)
+  Sprite(..), Cube(..), Camera3D(..), Sound(..), Angle(..), Rectangle(..)
 ) where
 
 import Linear.V3
@@ -77,6 +77,10 @@ pattern Rotation yaw pitch roll = Rot (V3 yaw pitch roll)
 pattern Velocity :: Float -> Float -> Float -> Velocity
 pattern Velocity x y z = Vel (V3 x y z)
 
+{-# COMPLETE Size #-}
+pattern Size :: Float -> Float -> Float -> Size
+pattern Size x y z = Size' (V3 x y z)
+
 instance HasXYZ (V3 Float) where
   x (V3 x_ _ _) = x_
   y (V3 _ y_ _) = y_
@@ -112,7 +116,7 @@ right rot = normalize (cross (forward rot) (V3 0 1 0))
 -- For rotating Sprites
 newtype Angle = Angle Float
 
-newtype Size = Size (V3 Float)
+newtype Size = Size' (V3 Float)
   deriving (Eq, Show, Num)
 
 -- {-# COMPLETE Size #-}
@@ -138,3 +142,4 @@ data Camera3D = Camera3D {
 
 -- Shapes
 data Cube = Cube
+data Rectangle = Rectangle

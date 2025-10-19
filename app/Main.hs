@@ -23,6 +23,8 @@ gravityForce = 820
 
 -- | Timer for spawning pipes
 newtype PipeTimer = PipeTimer Float
+-- | Timer for resetting the world
+newtype ResetTimer = ResetTimer Float
 
 -- Marker components
 data Bird = Bird       -- ^ For the bird (when playing)
@@ -30,7 +32,7 @@ data Gravity = Gravity -- ^ Affected by gravity
 data Ground = Ground   -- ^ For the ground
 data Tap = Tap         -- ^ Relating to the "Tap" graphic at the start of the game
 data Pipe = Pipe { wasPassed :: Bool, isTop :: Bool}
-data Curtain = Open | Closed -- A type for handling the re-setting of the game world
+newtype OkButton = OkButton { active :: Bool }
 data Score = Score Int Int
 data ScoreCounter = ScoreCounter
 
@@ -148,10 +150,7 @@ collision bird (Collider x1 y1 w1 h1) (Every colliders) t
     system (\(_ :: ScoreCounter) -> despawn :: Scene ()) -- remove the score counter
 
     let onScoreboard x y =
-          [Frame (0, Color 255 255 255 0),
-           Frame (60, Color 255 255 255 0),
-           Frame (80, Color 255 255 255 255),
-           Frame (70, Position (15 + x) (210 + y) 2),
+          [Frame (70, Position (15 + x) (210 + y) 2),
            Frame (80, Position (15 + x) (86 + y) 2),
            Frame (100, Position (15 + x) (110 + y) 2)]
 
@@ -169,23 +168,44 @@ collision bird (Collider x1 y1 w1 h1) (Every colliders) t
           (Font "font.png")
           (Animation (onScoreboard 102 37) 1)
 
-    spawn (Sprite "ok.png")
+    spawn OkButton { active = False }
+          (Sprite "ok.png")
           (Position 51 222 4)
           (Animation (onScoreboard 36 112
                         ++ [Frame (98, OkButton { active = False }),
                             Frame (99, OkButton { active = True })]) 1)
 
-restartGame :: OkButton -> Position -> Keyboard -> Mouse ->  Scene ()
+restartGame :: OkButton -> Position -> Keyboard -> Mouse -> Scene ()
 restartGame (OkButton { active = True }) btnPos keyboard mouse =
   when (isFlapping keyboard mouse) $ do
     set (Animation [Frame (0, btnPos + Position 0 0 0),
-                    Frame (50, btnPos + Position 0 4 0),
-                    Frame (80, btnPos - Position 0 2 0),
-                    Frame (90, btnPos)] 0.5)
+                    Frame (20, btnPos + Position 0 4 0),
+                    Frame (30, btnPos - Position 0 1 0),
+                    Frame (50, btnPos),
+                    Frame (100, btnPos)] 0.5)
 
     remove (OkButton True) -- make it so they can't press again
-    return ()
+
+    -- drop the curtain
+    spawn Rectangle
+          (Color 0 0 0 0)
+          (Position 0 0 4)
+          (Size 144 256 0)
+          (Animation [Frame (0, Color 0 0 0 0),
+                      Frame (50, Color 0 0 0 255),
+                      Frame (100, Color 0 0 0 0)] 1)
+    
+    resource (ResetTimer 0.5)
 restartGame _ _ _ _ = pure ()
+
+resetWorld :: ResetTimer -> Time -> Score -> Scene ResetTimer
+resetWorld (ResetTimer timer) t (Score _ best) = case () of
+  _ | timer > 0 -> return (ResetTimer (timer - t))
+    | otherwise -> do
+      system (\(_ :: Not Rectangle) -> despawn :: Scene ())
+      resource (Score 0 best)
+      setupScene
+      return (ResetTimer 999999999999)
 
 -- | Add score when a pipe that hasn't already been passed
 -- goes past a certain point
@@ -198,13 +218,35 @@ score (Pipe { wasPassed = False, isTop = True }) pos (Score cur best) =
     return (Pipe False True, Score cur best)
 score p _ s = return (p, s)
 
-updateScoreCounter :: ScoreCounter -> Score -> Text
-updateScoreCounter _ (Score currentScore _) =
+scoreCounter :: ScoreCounter -> Score -> Text
+scoreCounter _ (Score currentScore _) =
   Text (show currentScore) 21 AlignCenter
 
 birdDive :: Bird -> Velocity -> Angle
 birdDive _ (Velocity 0 vy _)
   = Angle (max (-30) (min 90 (vy * 0.3)))
+
+setupScene :: Scene ()
+setupScene = do
+  spawn (Sprite "backdrop.png")
+        (Position 0 0 0)
+
+  spawn Ground
+        (Sprite "ground.png")
+        (Position 0 200 1)
+        (Collider 0 0 168 56)
+        (Velocity (-scrollSpeed) 0 0)
+
+  -- Bird
+  spawn Tap
+        (Sprite "bird.png")
+        (Position 20 116 0.5)
+        (Collider 0 0 17 12)
+        (Animation (map (Frame . Sprite) birdAnimation) (loop 0.4))
+
+  spawn Tap
+        (Sprite "tap.png")
+        (Position 40 116 1)
 
 main :: IO ()
 main = do
@@ -222,25 +264,7 @@ main = do
     resource (PipeTimer pipeRate)
     resource (Score 0 0)
 
-    spawn (Sprite "backdrop.png")
-          (Position 0 0 0)
-
-    spawn Ground
-          (Sprite "ground.png")
-          (Position 0 200 1)
-          (Collider 0 0 168 56)
-          (Velocity (-scrollSpeed) 0 0)
-
-    -- Bird
-    spawn Tap
-          (Sprite "bird.png")
-          (Position 20 116 0.5)
-          (Collider 0 0 17 12)
-          (Animation (map (Frame . Sprite) birdAnimation) (-0.4))
-
-    spawn Tap
-          (Sprite "tap.png")
-          (Position 40 116 1)
+    setupScene
 
     gameLoop $ do
       system startGame
@@ -256,5 +280,6 @@ main = do
       system collision
       system animate
       system score
-      system updateScoreCounter
+      system scoreCounter
       system restartGame
+      system resetWorld

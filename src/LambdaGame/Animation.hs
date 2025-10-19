@@ -16,6 +16,7 @@ import Data.Fixed (mod')
 import LambdaGame.Components (Color(..), Position (..), HasXYZ (..), Rotation)
 import Data.Maybe (fromMaybe)
 import Linear (Additive(lerp))
+import Linear.V4 (V4(..))
 
 class Animatable a where
   tween :: a     -- ^ Start value
@@ -35,8 +36,8 @@ instance {-# OVERLAPPING #-} Animatable Position where
     fromV3 (lerp progress (toV3 p1) (toV3 p2))
 
 instance {-# OVERLAPPING #-} Animatable Color where
-  tween p1 p2 progress =
-    fromV3 (lerp progress (toV3 p1) (toV3 p2))
+  tween (Color sr sg sb sa) (Color er eg eb ea) progress =
+    (\(V4 r g b a) -> Color r g b a) (lerp progress (V4 sr sg sb sa) (V4 er eg eb ea) )
 
 instance {-# OVERLAPPING #-} Animatable Rotation where
   tween p1 p2 progress =
@@ -136,8 +137,12 @@ runAnims anim (Animating startTime') (TimeElapsed timeElapsed) = do
 
         case framesWithTimes !? 0 of
           (Just firstFrame) ->
+            -- this system re-uses the first frame when it shouldn't
+            -- which can cause unexpected results
             let (frameStart, currentFrame) = fromMaybe firstFrame $ previousFrames !? (length previousFrames - 1)
-                (frameEnd, nextFrame) = fromMaybe firstFrame $ nextFrames !? 0
+                (frameEnd, nextFrame) = fromMaybe (if isLooping then
+                                                     firstFrame else (frameStart, currentFrame))
+                                                  $ nextFrames !? 0
                 progress = (animationPercentage - frameStart)
                               / (frameEnd - frameStart) * 100 in
 

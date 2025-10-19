@@ -4,7 +4,7 @@
 module LambdaGame.Backend.Raylib ( raylibBackend ) where
 
 import LambdaGame.Components (Text(..), Position(..), Color (..),
-  Sprite (..), Cube, HasXYZ(..), Rotation (..), Camera3D (..), forward, Sound (..), Angle (..), Font (..), TextAlignment (..))
+  Sprite (..), Cube, HasXYZ(..), Rotation (..), Camera3D (..), forward, Sound (..), Angle (..), Font (..), TextAlignment (..), Rectangle, Size (..))
 import LambdaGame.Resources (Backend(..), Window(..), Time, windowSize,
   Keyboard (..), Key (..), Mouse (..), TimeElapsed (TimeElapsed))
 import LambdaGame.Scene (Scene, get, resource)
@@ -13,7 +13,7 @@ import Control.Monad.IO.Class (liftIO)
 import Raylib.Core (clearBackground, initWindow, setTargetFPS, windowShouldClose,
                     closeWindow, windowShouldClose, getFrameTime, beginDrawing, endDrawing, getScreenWidth, getScreenHeight, beginMode3D, endMode3D, isKeyDown, isKeyPressed, isKeyReleased, getMousePosition, getMouseDelta, hideCursor, disableCursor, isMouseButtonDown, isMouseButtonPressed, isMouseButtonReleased, beginBlendMode, endBlendMode)
 import Raylib.Core.Text (drawText, measureText, loadFont, getFontDefault, drawTextEx)
-import Raylib.Util (WindowResources)
+import Raylib.Util (WindowResources, blendMode)
 import Raylib.Util.Colors (black)
 import Data.Data (Proxy(..))
 import Control.Monad (when, filterM)
@@ -29,6 +29,7 @@ import qualified Data.Set as Set
 import Raylib.Util.RLGL (rlPushMatrix, rlPopMatrix, rlRotatef, rlTranslatef)
 import Data.List (sortOn)
 import Raylib.Core.Audio (loadSound, playSound, initAudioDevice)
+import Raylib.Core.Shapes (drawRectangle, drawRectangleRec)
 
 data Assets = Assets {
   textures :: Map String RL.Texture,
@@ -241,6 +242,19 @@ drawCubes _ maybePos maybeColor maybeRot = do
       rlPopMatrix
       endMode3D
 
+drawRectangles :: Rectangle -> Position -> Size -> Maybe Color -> Scene ()
+drawRectangles _ (Position x y _) (Size sx sy _) maybeColor = do
+  maybeWin <- get (Proxy @Window)
+  case maybeWin of
+    Nothing -> return ()
+    Just win -> do
+      screenW <- liftIO getScreenWidth
+      screenH <- liftIO getScreenHeight
+      let scale = getScale (screenW, screenH) win
+      liftIO $ beginBlendMode RL.BlendAlpha
+      liftIO $ drawRectangleRec (RL.Rectangle (x * scale) (y * scale) (sx * scale) (sy * scale)) color
+        where color = toRaylibColor (fromMaybe (Color 255 255 255 255) maybeColor)
+
 playSounds :: Sound -> Scene Sound
 playSounds SoundPlayed = return SoundPlayed
 playSounds (Sound fileName) = do
@@ -323,6 +337,7 @@ updateRaylib = do
       system recordSprites
       system drawSprites
       system drawTexts
+      system drawRectangles
       system drawCubes
       liftIO endDrawing
 
