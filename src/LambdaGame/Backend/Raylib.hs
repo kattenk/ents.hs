@@ -210,7 +210,7 @@ drawTexts (Text text size alignment) pos color maybeFont = do
                           AlignLeft -> V2 (x pos * scale) (y pos * scale)
                           AlignCenter -> V2 ((x pos * scale) - (fromIntegral textWidth / 2))
                                     (y pos * scale)
-                          AlignRight -> V2 ((x pos * scale) - (fromIntegral textWidth))
+                          AlignRight -> V2 ((x pos * scale) - fromIntegral textWidth)
                                     (y pos * scale)
 
         drawTextEx font text position scaledSize 3

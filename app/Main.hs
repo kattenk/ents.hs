@@ -30,7 +30,8 @@ data Gravity = Gravity -- ^ Affected by gravity
 data Ground = Ground   -- ^ For the ground
 data Tap = Tap         -- ^ Relating to the "Tap" graphic at the start of the game
 data Pipe = Pipe { wasPassed :: Bool, isTop :: Bool}
-data Score = Score Int Int -- ^ For keeping score
+data Curtain = Open | Closed -- A type for handling the re-setting of the game world
+data Score = Score Int Int
 data ScoreCounter = ScoreCounter
 
 data Collider = Collider Float Float Float Float -- x y w h
@@ -100,6 +101,7 @@ spawnPipes _ (PipeTimer timer) timeStep = do
           (Collider 0 0 26 200)
           (Velocity (-scrollSpeed) 0 0.1)
 
+    -- reset the pipe timer
     resource (PipeTimer pipeRate)
 
 -- | For despawning any entities that go offscreen to the left
@@ -111,6 +113,24 @@ updateColliders :: Position -> Collider -> Collider
 updateColliders pos (Collider _ _ w h) = Collider (x pos) (y pos) w h
 
 shrinkBy = 9
+
+startGame :: Tap -> Sprite -> Mouse -> Keyboard -> Scene ()
+startGame _ (Sprite spr) mouse keyboard =
+  when (isFlapping keyboard mouse) $ case () of
+    -- | Tapping to start the game adds the
+    -- 'Bird' and 'Velocity' components to the bird
+    _ | spr `elem` birdAnimation -> do
+          remove Tap
+          set Bird
+          set Gravity
+          set (Velocity 0 0 0)
+          spawn ScoreCounter
+                (Position 72 30 1)
+                (Font "font.png")
+
+      -- Tapping to start de-spawns the "Tap" graphic
+      | spr == "tap.png" -> despawn
+      | otherwise -> return ()
 
 -- | Collision/death system
 collision :: Bird -> Collider -> Every Collider -> Time -> Score -> Scene ()
@@ -131,9 +151,9 @@ collision bird (Collider x1 y1 w1 h1) (Every colliders) t
           [Frame (0, Color 255 255 255 0),
            Frame (60, Color 255 255 255 0),
            Frame (80, Color 255 255 255 255),
-           Frame (70, Position (15 + x) (210 + y) 1),
-           Frame (80, Position (15 + x) (86 + y) 1),
-           Frame (100, Position (15 + x) (110 + y) 1)]
+           Frame (70, Position (15 + x) (210 + y) 2),
+           Frame (80, Position (15 + x) (86 + y) 2),
+           Frame (100, Position (15 + x) (110 + y) 2)]
 
     spawn (Sprite "gameOver.png")
           (Animation (onScoreboard 0 (-30)) 1)
@@ -149,23 +169,23 @@ collision bird (Collider x1 y1 w1 h1) (Every colliders) t
           (Font "font.png")
           (Animation (onScoreboard 102 37) 1)
 
-startGame :: Tap -> Sprite -> Mouse -> Keyboard -> Scene ()
-startGame _ (Sprite spr) mouse keyboard =
-  when (isFlapping keyboard mouse) $ case () of
-    -- | Tapping to start the game adds the
-    -- 'Bird' and 'Velocity' components to the bird
-    _ | spr `elem` birdAnimation -> do
-          remove Tap
-          set Bird
-          set Gravity
-          set (Velocity 0 0 0)
-          spawn ScoreCounter
-                (Position 72 30 1)
-                (Font "font.png")
+    spawn (Sprite "ok.png")
+          (Position 51 222 4)
+          (Animation (onScoreboard 36 112
+                        ++ [Frame (98, OkButton { active = False }),
+                            Frame (99, OkButton { active = True })]) 1)
 
-      -- Tapping to start de-spawns the "Tap" graphic
-      | spr == "tap.png" -> despawn
-      | otherwise -> return ()
+restartGame :: OkButton -> Position -> Keyboard -> Mouse ->  Scene ()
+restartGame (OkButton { active = True }) btnPos keyboard mouse =
+  when (isFlapping keyboard mouse) $ do
+    set (Animation [Frame (0, btnPos + Position 0 0 0),
+                    Frame (50, btnPos + Position 0 4 0),
+                    Frame (80, btnPos - Position 0 2 0),
+                    Frame (90, btnPos)] 0.5)
+
+    remove (OkButton True) -- make it so they can't press again
+    return ()
+restartGame _ _ _ _ = pure ()
 
 -- | Add score when a pipe that hasn't already been passed
 -- goes past a certain point
@@ -237,3 +257,4 @@ main = do
       system animate
       system score
       system updateScoreCounter
+      system restartGame
