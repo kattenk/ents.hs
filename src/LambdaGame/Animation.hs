@@ -5,16 +5,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
-{-# HLINT ignore "Redundant case" #-}
 
 module LambdaGame.Animation (Frame(..), Animation(..), FrameSpec(..), loop, animate) where
 import Data.Typeable (Typeable, typeOf, cast)
 import LambdaGame.Systems
 import LambdaGame.Resources (TimeElapsed (TimeElapsed))
 import LambdaGame.Scene
-import Control.Monad.IO.Class (liftIO)
-import Data.List (nub, findIndex, (!?))
+import Data.List (nub, (!?))
 import Data.Fixed (mod')
 import LambdaGame.Components (Color(..), Position (..), HasXYZ (..), Rotation)
 import Data.Maybe (fromMaybe)
@@ -30,7 +27,7 @@ class Animatable a where
   stepped _ = False
 
 instance Animatable a where
-  tween a b progress = a
+  tween a _ _ = a
   stepped _ = True
 
 instance {-# OVERLAPPING #-} Animatable Position where

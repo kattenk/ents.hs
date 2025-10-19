@@ -4,15 +4,15 @@
 module LambdaGame.Backend.Raylib ( raylibBackend ) where
 
 import LambdaGame.Components (Text(..), Position(..), Color (..),
-  Sprite (..), Cube, HasXYZ(..), Rotation (..), Camera3D (..), forward, Sound (..), Angle (..), TextSize (..))
+  Sprite (..), Cube, HasXYZ(..), Rotation (..), Camera3D (..), forward, Sound (..), Angle (..), Font (..), TextAlignment (..))
 import LambdaGame.Resources (Backend(..), Window(..), Time, windowSize,
   Keyboard (..), Key (..), Mouse (..), TimeElapsed (TimeElapsed))
 import LambdaGame.Scene (Scene, get, resource)
 import LambdaGame.Systems (system)
 import Control.Monad.IO.Class (liftIO)
 import Raylib.Core (clearBackground, initWindow, setTargetFPS, windowShouldClose,
-                    closeWindow, windowShouldClose, getFrameTime, beginDrawing, endDrawing, getScreenWidth, getScreenHeight, beginMode3D, endMode3D, isKeyDown, isKeyPressed, isKeyReleased, getMousePosition, getMouseDelta, hideCursor, disableCursor, isMouseButtonDown, isMouseButtonPressed, isMouseButtonReleased)
-import Raylib.Core.Text (drawText, measureText)
+                    closeWindow, windowShouldClose, getFrameTime, beginDrawing, endDrawing, getScreenWidth, getScreenHeight, beginMode3D, endMode3D, isKeyDown, isKeyPressed, isKeyReleased, getMousePosition, getMouseDelta, hideCursor, disableCursor, isMouseButtonDown, isMouseButtonPressed, isMouseButtonReleased, beginBlendMode, endBlendMode)
+import Raylib.Core.Text (drawText, measureText, loadFont, getFontDefault, drawTextEx)
 import Raylib.Util (WindowResources)
 import Raylib.Util.Colors (black)
 import Data.Data (Proxy(..))
@@ -32,7 +32,8 @@ import Raylib.Core.Audio (loadSound, playSound, initAudioDevice)
 
 data Assets = Assets {
   textures :: Map String RL.Texture,
-  sounds :: Map String RL.Sound
+  sounds :: Map String RL.Sound,
+  fonts :: Map String RL.Font
 }
 
 getTextureHandle :: String -> Scene RL.Texture
@@ -40,7 +41,7 @@ getTextureHandle fileName = do
   maybeAssets <- get (Proxy @Assets)
 
   case maybeAssets of
-    Nothing -> error "What"
+    Nothing -> error $ "could not load: " ++ fileName
     (Just assets) -> do
       maybe (do handle <- liftIO $ loadTexture fileName
                 resource $ assets { textures = Map.insert fileName handle (textures assets)}
@@ -53,7 +54,7 @@ getSoundHandle fileName = do
   maybeAssets <- get (Proxy @Assets)
 
   case maybeAssets of
-    Nothing -> error "What"
+    Nothing -> error $ "could not load: " ++ fileName
     (Just assets) -> do
       maybe (do handle <- liftIO $ loadSound fileName
                 resource $ assets { sounds = Map.insert fileName handle (sounds assets)}
@@ -61,12 +62,25 @@ getSoundHandle fileName = do
             return
             (Map.lookup fileName (sounds assets))
 
+getFontHandle :: String -> Scene RL.Font
+getFontHandle fileName = do
+  maybeAssets <- get (Proxy @Assets)
+
+  case maybeAssets of
+    Nothing -> error $ "could not load: " ++ fileName
+    (Just assets) -> do
+      maybe (do handle <- liftIO $ loadFont fileName
+                resource $ assets { fonts = Map.insert fileName handle (fonts assets)}
+                return handle)
+            return
+            (Map.lookup fileName (fonts assets))
+
 startRaylib :: Scene ()
 startRaylib = do
   resource (0 :: Float) -- Time
   resource ([] :: [SpriteCommand])
   resource (TimeElapsed 0)
-  resource $ Assets { textures = Map.empty, sounds = Map.empty }
+  resource $ Assets { textures = Map.empty, sounds = Map.empty, fonts = Map.empty }
   resource $ Mouse { mousePos = (0, 0),
                      mouseMovement = (0, 0),
                      leftMouseDown = False,
@@ -126,11 +140,13 @@ data SpriteCommand = SpriteCommand {
   sprTexture :: RL.Texture,
   sprPosition :: V3 Float,
   sprSize :: V2 Float,
-  sprAngle :: Float
+  sprAngle :: Float,
+  sprTint :: RL.Color
 }
 
-recordSprites :: [SpriteCommand] -> Sprite -> Position -> Maybe Angle -> Scene ()
-recordSprites cmds (Sprite spr) pos angle = do
+-- this is done for Z-sorting
+recordSprites :: [SpriteCommand] -> Sprite -> Position -> Maybe Angle -> Maybe Color -> Scene ()
+recordSprites cmds (Sprite spr) pos angle tint = do
   maybeWin <- get (Proxy @Window)
   case maybeWin of
     Nothing -> return ()
@@ -149,7 +165,8 @@ recordSprites cmds (Sprite spr) pos angle = do
         sprSize = V2 (texW * scale) (texH * scale),
         sprAngle = case angle of
           Nothing -> 0
-          (Just (Angle a)) -> a
+          (Just (Angle a)) -> a,
+        sprTint = toRaylibColor (fromMaybe (Color 255 255 255 255) tint)
       } : cmds
 
 drawSprites :: [SpriteCommand] -> Scene ()
@@ -158,6 +175,7 @@ drawSprites cmds = do
 -- DrawTexturePro(Texture2D texture, Rectangle source, Rectangle dest,
                -- Vector2 origin, float rotation, Color tint);
   mapM_ (\cmd -> do
+    liftIO $ beginBlendMode RL.BlendAlpha
     liftIO $ drawTexturePro (sprTexture cmd)
                             (RL.Rectangle 0 0 (fromIntegral (RL.texture'width (sprTexture cmd)))
                                               (fromIntegral (RL.texture'height (sprTexture cmd))))
@@ -165,27 +183,38 @@ drawSprites cmds = do
                                           (y (sprPosition cmd) + (y (sprSize cmd) / 2))
                                           (x (sprSize cmd))
                                           (y (sprSize cmd)))
-                            (V2 (x (sprSize cmd) / 2) (y (sprSize cmd) / 2)) (sprAngle cmd) (RL.Color 255 255 255 255)) sortedCmds
+                            (V2 (x (sprSize cmd) / 2) (y (sprSize cmd) / 2)) (sprAngle cmd) (sprTint cmd)) sortedCmds
 
-drawTexts :: Text -> Position -> Maybe Color -> Maybe TextSize -> Scene ()
-drawTexts (Text text) pos color maybeSize = do
+    -- void DrawText(const char *text, int posX, int posY, int fontSize, Color color);       // Draw text (using default font)
+    -- void DrawTextEx(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint); // Draw 
+
+drawTexts :: Text -> Position -> Maybe Color -> Maybe Font -> Scene ()
+drawTexts (Text text size alignment) pos color maybeFont = do
   maybeWin <- get (Proxy @Window)
   case maybeWin of
     Nothing -> return ()
     Just win -> do
       screenW <- liftIO getScreenWidth
       screenH <- liftIO getScreenHeight
+      defaultFont <- liftIO getFontDefault
 
       let scale = getScale (screenW, screenH) win
-          (TextSize textSize) = fromMaybe (TextSize 20) maybeSize
-          scaledSize = textSize * scale
+          scaledSize = size * scale
+
+      font <- maybe (return defaultFont) (\(Font a) -> getFontHandle a) maybeFont
 
       liftIO $ do
         textWidth <- measureText text (round scaledSize)
-        drawText text (round ((x pos * scale) - (fromIntegral textWidth / 2)))
-                      (round (y pos * scale)) (round scaledSize)
+
+        let position = case alignment of
+                          AlignLeft -> V2 (x pos * scale) (y pos * scale)
+                          AlignCenter -> V2 ((x pos * scale) - (fromIntegral textWidth / 2))
+                                    (y pos * scale)
+                          AlignRight -> V2 ((x pos * scale) - (fromIntegral textWidth))
+                                    (y pos * scale)
+
+        drawTextEx font text position scaledSize 3
           (toRaylibColor (fromMaybe (Color 255 255 255 255) color))
-      return ()
 
 toRaylibColor :: Color -> RL.Color
 toRaylibColor (Color r g b a) =
@@ -288,7 +317,8 @@ updateRaylib = do
 
       liftIO beginDrawing
       liftIO $ clearBackground black
-      -- Drawing systems
+
+      -- Drawing
       resource ([] :: [SpriteCommand])
       system recordSprites
       system drawSprites

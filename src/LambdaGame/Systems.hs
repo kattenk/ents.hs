@@ -57,7 +57,7 @@ instance {-# OVERLAPS #-} (Typeable a) => SystemParam (Not a) where
   argumentFor _ = return (Just Not)
 
 -- | This is called "Every" but what it really means is
--- "Every component of this type except the current entities one"
+-- "Every component of this type except the current entity's one"
 newtype Every a = Every [a]
 instance {-# OVERLAPPING #-} (Typeable a) => SystemParam (Every a) where
   shouldRun _ = return True

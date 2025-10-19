@@ -3,9 +3,11 @@
 {-# LANGUAGE FlexibleInstances #-}
 
 module LambdaGame.Components (
-  Position(Pos, Position), Rotation(Rot, Rotation), HasXYZ(..), Velocity(Vel, Velocity),
+  Position(Pos, Position), Rotation(Rot, Rotation),
+  HasXYZ(..), Velocity(Vel, Velocity),
   yaw, pitch, roll, forward, right, Size(..),
-  Color(Color', Color), Text(..), Sprite(..), Cube(..), Camera3D(..), Sound(..), Angle(..), TextSize(..)
+  Color(Color', Color), Text(..), TextAlignment(..), Font(..),
+  Sprite(..), Cube(..), Camera3D(..), Sound(..), Angle(..)
 ) where
 
 import Linear.V3
@@ -117,8 +119,16 @@ newtype Size = Size (V3 Float)
 -- pattern Size :: Float -> Float -> Float -> Position
 -- pattern Size x y z = Pos (V3 x y z)
 
-newtype Text = Text String
-newtype TextSize = TextSize Float
+data TextAlignment = AlignLeft | AlignRight | AlignCenter
+
+data Text = Text {
+  textContent :: String,
+  textSize :: Float,
+  alignment :: TextAlignment
+}
+
+newtype Font = Font String
+
 newtype Sprite = Sprite String
 data Sound = Sound String | SoundPlayed deriving Show
 

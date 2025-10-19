@@ -36,7 +36,7 @@ windowSize screenSize window =
     Manual dimensions -> dimensions
     Automatic -> bimap (6 *) (6 *) (res window)
 
-type Time = Float -- | This is called "Time" but it's actually the frame time (delta time)
+type Time = Float -- | This is called "Time" but it's actually the (delta time)
 newtype TimeElapsed = TimeElapsed Float -- | The total time elapsed so far
 
 data Key = W | A | S | D | Space deriving (Show, Enum, Eq, Ord, Bounded)
