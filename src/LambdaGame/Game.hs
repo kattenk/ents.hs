@@ -30,6 +30,7 @@ defaultWindow = Window {
   targetFps = 300,
   captureCursor = False,
   backend = raylibBackend,
+  onWebPlatform = False,
   exit = False
 }
 
@@ -53,6 +54,7 @@ gameLoop userLoop = do
     loop = do
       win <- getWindow
       updateBackend (backend win)
+
       let targetFrameTime = 1.0 / fromIntegral (targetFps win)
 
       startTime <- liftIO getCurrentTime
@@ -62,7 +64,8 @@ gameLoop userLoop = do
       let elapsed = realToFrac $ diffUTCTime endTime startTime
       let remaining = targetFrameTime - elapsed
 
-      when (remaining > (0 :: Double)) $ do
-        liftIO $ threadDelay (round (remaining * 1000000))
+      unless (onWebPlatform win) $ do
+        when (remaining > (0 :: Double)) $ do
+          liftIO $ threadDelay (round (remaining * 1000000))
 
       unless (exit win) loop

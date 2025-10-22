@@ -11,12 +11,12 @@ import LambdaGame.Scene (Scene, get, resource)
 import LambdaGame.Systems (system)
 import Control.Monad.IO.Class (liftIO)
 import Raylib.Core (clearBackground, initWindow, setTargetFPS, windowShouldClose,
-                    closeWindow, windowShouldClose, getFrameTime, beginDrawing, endDrawing, getScreenWidth, getScreenHeight, beginMode3D, endMode3D, isKeyDown, isKeyPressed, isKeyReleased, getMousePosition, getMouseDelta, hideCursor, disableCursor, isMouseButtonDown, isMouseButtonPressed, isMouseButtonReleased, beginBlendMode, endBlendMode)
-import Raylib.Core.Text (drawText, measureText, loadFont, getFontDefault, drawTextEx)
-import Raylib.Util (WindowResources, blendMode)
+                    closeWindow, windowShouldClose, getFrameTime, beginDrawing, endDrawing, beginMode3D, endMode3D, isKeyDown, isKeyPressed, isKeyReleased, getMousePosition, getMouseDelta, hideCursor, disableCursor, isMouseButtonDown, isMouseButtonPressed, isMouseButtonReleased, beginBlendMode, endBlendMode, getMonitorWidth, getMonitorHeight)
+import Raylib.Core.Text (measureText, loadFont, getFontDefault, drawTextEx)
+import Raylib.Util (WindowResources)
 import Raylib.Util.Colors (black)
 import Data.Data (Proxy(..))
-import Control.Monad (when, filterM)
+import Control.Monad (when, filterM, unless)
 import Data.Map.Strict (Map)
 import qualified Data.Map as Map
 import Raylib.Core.Textures (loadTexture, drawTexturePro)
@@ -29,7 +29,7 @@ import qualified Data.Set as Set
 import Raylib.Util.RLGL (rlPushMatrix, rlPopMatrix, rlRotatef, rlTranslatef)
 import Data.List (sortOn)
 import Raylib.Core.Audio (loadSound, playSound, initAudioDevice)
-import Raylib.Core.Shapes (drawRectangle, drawRectangleRec)
+import Raylib.Core.Shapes (drawRectangleRec)
 
 data Assets = Assets {
   textures :: Map String RL.Texture,
@@ -42,7 +42,7 @@ getTextureHandle fileName = do
   maybeAssets <- get (Proxy @Assets)
 
   case maybeAssets of
-    Nothing -> error $ "could not load: " ++ fileName
+    Nothing -> error "could not get Assets"
     (Just assets) -> do
       maybe (do handle <- liftIO $ loadTexture fileName
                 resource $ assets { textures = Map.insert fileName handle (textures assets)}
@@ -55,7 +55,7 @@ getSoundHandle fileName = do
   maybeAssets <- get (Proxy @Assets)
 
   case maybeAssets of
-    Nothing -> error $ "could not load: " ++ fileName
+    Nothing -> error "could not get Assets"
     (Just assets) -> do
       maybe (do handle <- liftIO $ loadSound fileName
                 resource $ assets { sounds = Map.insert fileName handle (sounds assets)}
@@ -68,7 +68,7 @@ getFontHandle fileName = do
   maybeAssets <- get (Proxy @Assets)
 
   case maybeAssets of
-    Nothing -> error $ "could not load: " ++ fileName
+    Nothing -> error "could not get Assets"
     (Just assets) -> do
       maybe (do handle <- liftIO $ loadFont fileName
                 resource $ assets { fonts = Map.insert fileName handle (fonts assets)}
@@ -107,13 +107,14 @@ startRaylib = do
   maybeWin <- get (Proxy @Window)
   case maybeWin of
     (Just win) -> do
-      screenWidth <- liftIO getScreenWidth
-      screenHeight <- liftIO getScreenHeight
+      screenWidth <- liftIO $ getMonitorWidth 0
+      screenHeight <- liftIO $ getMonitorHeight 0
 
       raylibWindow <- liftIO $ uncurry
         initWindow (windowSize (screenWidth, screenHeight) win) (title win)
 
-      liftIO $ setTargetFPS (targetFps win)
+      unless (onWebPlatform win) $ do
+        liftIO $ setTargetFPS (targetFps win)
       liftIO initAudioDevice
 
       when (captureCursor win) $ do
@@ -153,8 +154,8 @@ recordSprites cmds (Sprite spr) pos angle tint = do
     Nothing -> return ()
     Just win -> do
       texture <- getTextureHandle spr
-      screenW <- liftIO getScreenWidth
-      screenH <- liftIO getScreenHeight
+      screenW <- liftIO $ getMonitorWidth 0
+      screenH <- liftIO $ getMonitorHeight 0
 
       let scale = getScale (screenW, screenH) win
           texW = fromIntegral (RL.texture'width texture)
@@ -175,8 +176,8 @@ drawSprites cmds = do
   let sortedCmds = sortOn ((\(V3 _ _ z_) -> z_) . sprPosition) cmds
 -- DrawTexturePro(Texture2D texture, Rectangle source, Rectangle dest,
                -- Vector2 origin, float rotation, Color tint);
+  liftIO $ beginBlendMode RL.BlendAlpha
   mapM_ (\cmd -> do
-    liftIO $ beginBlendMode RL.BlendAlpha
     liftIO $ drawTexturePro (sprTexture cmd)
                             (RL.Rectangle 0 0 (fromIntegral (RL.texture'width (sprTexture cmd)))
                                               (fromIntegral (RL.texture'height (sprTexture cmd))))
@@ -185,6 +186,9 @@ drawSprites cmds = do
                                           (x (sprSize cmd))
                                           (y (sprSize cmd)))
                             (V2 (x (sprSize cmd) / 2) (y (sprSize cmd) / 2)) (sprAngle cmd) (sprTint cmd)) sortedCmds
+
+  liftIO $ endBlendMode
+
 
     -- void DrawText(const char *text, int posX, int posY, int fontSize, Color color);       // Draw text (using default font)
     -- void DrawTextEx(Font font, const char *text, Vector2 position, float fontSize, float spacing, Color tint); // Draw 
@@ -195,14 +199,13 @@ drawTexts (Text text size alignment) pos color maybeFont = do
   case maybeWin of
     Nothing -> return ()
     Just win -> do
-      screenW <- liftIO getScreenWidth
-      screenH <- liftIO getScreenHeight
-      defaultFont <- liftIO getFontDefault
+      screenW <- liftIO $ getMonitorWidth 0
+      screenH <- liftIO $ getMonitorHeight 0
 
+      defaultFont <- liftIO getFontDefault
+      font <- maybe (return defaultFont) (\(Font a) -> getFontHandle a) maybeFont
       let scale = getScale (screenW, screenH) win
           scaledSize = size * scale
-
-      font <- maybe (return defaultFont) (\(Font a) -> getFontHandle a) maybeFont
 
       liftIO $ do
         textWidth <- measureText text (round scaledSize)
@@ -248,8 +251,8 @@ drawRectangles _ (Position x y _) (Size sx sy _) maybeColor = do
   case maybeWin of
     Nothing -> return ()
     Just win -> do
-      screenW <- liftIO getScreenWidth
-      screenH <- liftIO getScreenHeight
+      screenW <- liftIO $ getMonitorWidth 0
+      screenH <- liftIO $ getMonitorHeight 0
       let scale = getScale (screenW, screenH) win
       liftIO $ beginBlendMode RL.BlendAlpha
       liftIO $ drawRectangleRec (RL.Rectangle (x * scale) (y * scale) (sx * scale) (sy * scale)) color
@@ -329,26 +332,35 @@ updateRaylib = do
       system updateKeyboard
       system updateCameras
 
-      liftIO beginDrawing
-      liftIO $ clearBackground black
+      unless (onWebPlatform win) $ do
+        liftIO beginDrawing
+      
+        liftIO $ clearBackground black
 
       -- Drawing
       resource ([] :: [SpriteCommand])
       system recordSprites
       system drawSprites
-      system drawTexts
+
+      unless (onWebPlatform win) $ do
+        system drawTexts
+
       system drawRectangles
       system drawCubes
-      liftIO endDrawing
+
+      unless (onWebPlatform win) $ do
+        liftIO endDrawing
 
       -- Sound
       system playSounds
 
       -- Use Raylib's WindowShouldClose function to exit
       -- if escape is pressed or the close button is clicked
-      shouldClose <- liftIO windowShouldClose
-      when shouldClose $ do
-        resource $ win { exit = True }
+      unless (onWebPlatform win) $ do
+        shouldClose <- liftIO windowShouldClose
+        
+        when shouldClose $ do
+          resource $ win { exit = True }
 
 stopRaylib :: Scene ()
 stopRaylib = do

@@ -21,8 +21,6 @@ import Data.Maybe (isJust)
 
 -- TODO: Reuseable indices
 
--- data Ent = Ent { index :: Int, generation :: Int }
-
 -- | The 'Scene' Monad
 type Scene = StateT SceneState IO
 
@@ -135,7 +133,7 @@ instance {-# OVERLAPPING #-} (Rep a, Rep (ReturnType a), Integral i) => Componen
     component <- maybe (getResource @(ReturnType a))
                        (`Vector.read` fromIntegral i)
                        componentVec
-    
+
     return $ isJust component
 
   remove (i, _) = do
@@ -182,7 +180,7 @@ makeComponentVector a = do
   -- a new action that grows the new vector
   modify $ \scnState -> scnState
     { growComponents = growComponents scnState >> makeVectorGrower a}
-  
+
   -- similar thing with clearing
   clearEntityFn <- gets clearEntity
   modify $ \scnState -> scnState
@@ -257,6 +255,10 @@ despawn' :: Int -> Scene ()
 despawn' i = do
   clearFn <- gets clearEntity
   clearFn i
+
+  -- causes strange freaking issues man, we'll just leave this out
+  -- modify $ \scn ->
+  --   scn { reusableIndices = i : reusableIndices scn }
 
 -- | Despawn the current entity
 instance {-# OVERLAPS #-} a ~ () => Despawn (Scene a) where

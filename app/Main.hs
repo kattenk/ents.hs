@@ -11,9 +11,6 @@ import Linear.V3 (V3 (..))
 import Data.Data (Proxy(..))
 import Data.Dynamic (Typeable)
 
--- MUST REMEMBER TO FIX RESOLUTION ON 1080p
--- also remember to fix crash with no entities
-
 -- Game parameters
 scrollSpeed = 55
 pipeGap = 50
@@ -31,7 +28,7 @@ data Bird = Bird       -- ^ For the bird (when playing)
 data Gravity = Gravity -- ^ Affected by gravity
 data Ground = Ground   -- ^ For the ground
 data Tap = Tap         -- ^ Relating to the "Tap" graphic at the start of the game
-data Pipe = Pipe { wasPassed :: Bool, isTop :: Bool}
+data Pipe = Pipe { wasPassed :: Bool, isTop :: Bool }
 newtype OkButton = OkButton { active :: Bool }
 data Score = Score Int Int
 data ScoreCounter = ScoreCounter
@@ -114,8 +111,6 @@ despawnPipes pos = when (x pos < -26) despawn
 updateColliders :: Position -> Collider -> Collider
 updateColliders pos (Collider _ _ w h) = Collider (x pos) (y pos) w h
 
-shrinkBy = 9
-
 startGame :: Tap -> Sprite -> Mouse -> Keyboard -> Scene ()
 startGame _ (Sprite spr) mouse keyboard =
   when (isFlapping keyboard mouse) $ case () of
@@ -136,13 +131,11 @@ startGame _ (Sprite spr) mouse keyboard =
 
 -- | Collision/death system
 collision :: Bird -> Collider -> Every Collider -> Time -> Score -> Scene ()
-collision bird (Collider x1 y1 w1 h1) (Every colliders) t
+collision bird (Collider posX posY width height) (Every colliders) t
           (Score lastScore bestScore) = do
-  let overlaps = map (not . \(Collider x2 y2 w2 h2)
-        -> (x1) + (w1 - shrinkBy) <= x2 ||
-           x2 + w2 <= (x1 + shrinkBy) ||
-           y1 + h1 <= y2 ||
-           y2 + h2 <= y1) colliders
+  let overlaps = map (\(Collider x y w h)
+        -> (posX + (width - 3)) >= x && (posX) < x + w &&
+           (posY + height) >= y && (posY) < y + h) colliders
   when (or overlaps) $ do
     set $ Sound "death.ogg"
     remove bird -- remove the Bird component from the bird after death
@@ -160,13 +153,13 @@ collision bird (Collider x1 y1 w1 h1) (Every colliders) t
     spawn (Sprite "scoreboard.png")
           (Animation (onScoreboard 0 0) 1)
 
-    spawn (Text (show lastScore) 15 AlignRight)
+    spawn (Text (show lastScore) 15 AlignLeft)
           (Font "font.png")
-          (Animation (onScoreboard 102 17) 1)
+          (Animation (onScoreboard 90 17) 1)
 
-    spawn (Text (show bestScore) 15 AlignRight)
+    spawn (Text (show bestScore) 15 AlignLeft)
           (Font "font.png")
-          (Animation (onScoreboard 102 37) 1)
+          (Animation (onScoreboard 90 37) 1)
 
     spawn OkButton { active = False }
           (Sprite "ok.png")
@@ -185,6 +178,8 @@ restartGame (OkButton { active = True }) btnPos keyboard mouse =
                     Frame (100, btnPos)] 0.5)
 
     remove (OkButton True) -- make it so they can't press again
+    
+    set (Sound "swoosh.ogg")
 
     -- drop the curtain
     spawn Rectangle
@@ -195,7 +190,9 @@ restartGame (OkButton { active = True }) btnPos keyboard mouse =
                       Frame (50, Color 0 0 0 255),
                       Frame (100, Color 0 0 0 0)] 1)
     
+    -- reset half-way through the animation
     resource (ResetTimer 0.5)
+
 restartGame _ _ _ _ = pure ()
 
 resetWorld :: ResetTimer -> Time -> Score -> Scene ResetTimer
@@ -258,6 +255,7 @@ main = do
       targetFps = 300,
       captureCursor = False,
       backend = raylibBackend,
+      onWebPlatform = False,
       exit = False
     }
 

@@ -107,9 +107,6 @@ runAnims anim (Animating startTime') (TimeElapsed timeElapsed) = do
       stillAnimating :: Bool
       stillAnimating = isLooping || ((timeElapsed - startTime') < duration anim)
 
-      divisions :: Int -> [Float]
-      divisions n = [ fromIntegral i * 100 / fromIntegral n | i <- [0..n] ]
-
       applyAnimation :: Frame -> Frame -> Float -> Scene ()
       applyAnimation (Frame currentFrame) (Frame nextFrame) progress = do
         let currentValue = value currentFrame
@@ -130,8 +127,9 @@ runAnims anim (Animating startTime') (TimeElapsed timeElapsed) = do
                   Nothing -> if stepped b then
                               100 / fromIntegral (length trackFrames) * fromIntegral index
                              else
-                              -- this may be wrong I messed with it
                               divisions (length trackFrames - 1) !! index, f))) [0..] trackFrames
+                                where divisions n = [ fromIntegral i * 100 / fromIntegral n | i <- [0..n] ]
+                            
             previousFrames = filter ((< animationPercentage) . fst) framesWithTimes
             nextFrames     = filter ((> animationPercentage) . fst) framesWithTimes
 

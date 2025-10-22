@@ -16,15 +16,17 @@ data Backend = Backend {
   stopBackend :: Scene ()    -- ^ Action to run when stopping
 }
 
-data WindowSize = Automatic | Manual (Int, Int)
+data WindowSize = Automatic
+                | Manual (Int, Int)
 
 data Window = Window {
   title :: String,          -- ^ Window title
   res :: (Int, Int),        -- ^ Size of the canvas, in pixels
-  size :: WindowSize,       -- ^ Actual size of the window, in pixels
+  size :: WindowSize,       -- ^ Actual size of the window
   targetFps :: Int,         -- ^ Target framerate
   captureCursor :: Bool,    -- ^ Capture the mouse cursor?
   backend :: Backend,       -- ^ What backend should the game use?
+  onWebPlatform :: Bool,    -- ^ Is it running on the web? (hack / workarounds here)
   exit :: Bool              -- ^ Should the game exit at the end of this frame?
 }
 
@@ -34,9 +36,11 @@ windowSize :: (Int, Int)
 windowSize screenSize window =
   case size window of
     Manual dimensions -> dimensions
-    Automatic -> bimap (6 *) (6 *) (res window)
+    Automatic -> if onWebPlatform window
+                    then bimap (6 *) (6 *) (res window)
+                    else bimap (6 *) (6 *) (res window)
 
-type Time = Float -- | This is called "Time" but it's actually the (delta time)
+type Time = Float -- | This is called "Time" but it's actually the (delta)time
 newtype TimeElapsed = TimeElapsed Float -- | The total time elapsed so far
 
 data Key = W | A | S | D | Space deriving (Show, Enum, Eq, Ord, Bounded)
