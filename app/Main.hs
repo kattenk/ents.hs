@@ -165,8 +165,8 @@ collision bird (Collider posX posY width height) (Every colliders) t
           (Sprite "ok.png")
           (Position 51 222 4)
           (Animation (onScoreboard 36 112
-                        ++ [Frame (98, OkButton { active = False }),
-                            Frame (99, OkButton { active = True })]) 1)
+                        ++ [Frame (80, OkButton { active = False }),
+                            Frame (90, OkButton { active = True })]) 1)
 
 restartGame :: OkButton -> Position -> Keyboard -> Mouse -> Scene ()
 restartGame (OkButton { active = True }) btnPos keyboard mouse =
