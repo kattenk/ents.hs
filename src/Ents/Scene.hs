@@ -141,7 +141,6 @@ remove _ = do
   case componentVec of
     Nothing -> return ()
     (Just vec) -> do
-      liftIO $ putStrLn $ "Removing............... " ++ show (typeRep (Proxy :: Proxy a))
       liftIO $ Vector.write vec (fromIntegral i) Nothing
 
 -- returns an action for expanding some component's vector
