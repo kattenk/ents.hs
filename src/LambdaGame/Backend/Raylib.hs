@@ -117,6 +117,8 @@ startRaylib = do
         liftIO $ setTargetFPS (targetFps win)
       liftIO initAudioDevice
 
+      -- liftIO $ setTargetFPS 90
+
       when (captureCursor win) $ do
         liftIO hideCursor
         liftIO disableCursor

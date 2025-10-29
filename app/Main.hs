@@ -1,283 +1,136 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE FlexibleContexts #-}
-
+{-# HLINT ignore "Redundant bracket" #-}
 module Main (main) where
+import LambdaGame.Components
+    ( Cube(Cube),
+      Camera3D(Camera3D),
+      Color(..),
+      Rotation(Rotation),
+      Position(Position),
+      yaw,
+      pitch,
+      forward,
+      right )
+import LambdaGame.Game ( gameLoop, runGame )
+import LambdaGame.Resources
+    ( Mouse(mouseMovement),
+      Keyboard(downKeys),
+      Key(D, W, A, S),
+      Time,
+      TimeElapsed(..) )
+import LambdaGame.Scene ( Spawn(spawn) )
+import LambdaGame.Systems ( system )
+import Linear (V3(..))
+import qualified Data.Set as Set
+import System.Random
 import LambdaGame
-import Control.Monad (when)
-import System.Random (randomRIO)
-import Linear.V3 (V3 (..))
-import Data.Data (Proxy(..))
-import Data.Dynamic (Typeable)
+import Control.Monad (replicateM_)
 
--- Game parameters
-scrollSpeed = 55
-pipeGap = 50
-pipeRate = 1.2
-flapForce = -210
-gravityForce = 820
+newtype Speed = Speed Float
+data Spin = Spin
+data Orbit = Orbit Float Float Float
 
--- | Timer for spawning pipes
-newtype PipeTimer = PipeTimer Float
--- | Timer for resetting the world
-newtype ResetTimer = ResetTimer Float
+-- | Changes color over time
+rainbow :: Color -> Time -> Speed -> Color
+rainbow (Color r g b a) timeStep (Speed speed)
+  | r == 255 && b == 0 && g < 255 =
+      Color r (clamp (g + changeAmount)) b a
+  | g == 255 && b == 0 && r > 0 =
+      Color (clamp (r - changeAmount)) g b a
+  | g == 255 && r == 0 && b < 255 =
+      Color r g (clamp (b + changeAmount)) a
+  | b == 255 && r == 0 && g > 0 =
+      Color r (clamp (g - changeAmount)) b a
+  | b == 255 && g == 0 && r < 255 =
+      Color (clamp (r + changeAmount)) g b a
+  | r == 255 && g == 0 && b > 0 =
+      Color r g (clamp (b - changeAmount)) a
+  | otherwise = Color 0 0 255 a
+  where
+    changeAmount = (speed * 30) * timeStep
+    clamp x = max 0 (min 255 x)
 
--- Marker components
-data Bird = Bird       -- ^ For the bird (when playing)
-data Gravity = Gravity -- ^ Affected by gravity
-data Ground = Ground   -- ^ For the ground
-data Tap = Tap         -- ^ Relating to the "Tap" graphic at the start of the game
-data Pipe = Pipe { wasPassed :: Bool, isTop :: Bool }
-newtype OkButton = OkButton { active :: Bool }
-data Score = Score Int Int
-data ScoreCounter = ScoreCounter
+data Fall = Fall
 
-data Collider = Collider Float Float Float Float -- x y w h
+fall :: Position -> Time -> Fall -> Position
+fall (Position x y z) ts f =
+  Position x (y + (0.3 * ts)) 0
 
-birdAnimation = ["birdFlapUp.png",
-                 "bird.png",
-                 "birdFlapDown.png",
-                 "bird.png"]
+spin :: Rotation -> Time -> Spin -> Speed -> Rotation
+spin (Rotation yaw pitch roll) t _ (Speed speed) =
+  Rotation (yaw + (speed * t)) (pitch + (speed * t)) (roll + (speed * t))
 
--- | Applies gravity
-gravity :: Gravity -> Velocity -> Time -> Velocity
-gravity _ vel t = vel + Velocity 0 (gravityForce * t) 0
+moveSpeed :: Float
+moveSpeed = 5
 
--- | Applies velocity
-move :: Velocity -> Position -> Time -> Position
-move (Velocity x y z) pos t =
-  pos + Position (x * t) (y * t) (z * t)
+movement :: Camera3D -> Keyboard -> Position -> Rotation -> Time -> Position
+movement _ keys pos rot timeStep =
+  pos + ((sum (map dirVec (Set.toList (downKeys keys))))
+          * toPosition (V3 timeStep timeStep timeStep)
+          * (Position moveSpeed moveSpeed moveSpeed))
+  where dirVec W = toPosition (forward rot)
+        dirVec A = toPosition ((right rot) * (-1))
+        dirVec S = toPosition ((forward rot) * (-1))
+        dirVec D = toPosition (right rot)
+        dirVec _ = toPosition 0
+        toPosition (V3 x y z) = Position x y z
 
--- | Resets the grounds X coord when it goes past -24
-scrollGround :: Ground -> Position -> Position
-scrollGround _ pos =
-  if x pos < -24 then
-    Position 0 (y pos) 1
-  else pos
+lookSens :: Float
+lookSens = 30
 
-isFlapping :: Keyboard -> Mouse -> Bool
-isFlapping kb mouse =
-  wasPressed kb Space || leftMousePressed mouse
+look :: Camera3D -> Mouse -> Rotation -> Time -> Rotation
+look _ mouse rot timeStep =
+  Rotation newYaw newPitch 0 where
+    moveX = (fst (mouseMovement mouse))
+    moveY = (snd (mouseMovement mouse))
+    newYaw = (yaw rot) - (moveX * lookSens) * timeStep
+    newPitch = (max (-89) (min 89 ((pitch rot) - (moveY * lookSens) * timeStep)))
 
--- | Flaps the bird
-flap :: Bird -> Velocity -> Keyboard -> Mouse -> Velocity
-flap _ vel keyboard mouse =
-  if isFlapping keyboard mouse then
-    Velocity 0 flapForce 0
-  else
-    vel
+orbit :: Orbit -> Speed -> Position -> TimeElapsed -> Position
+orbit (Orbit distance yaw pitch) (Speed speed) pos (TimeElapsed time) = toPosition newPos where
+      toPosition (V3 x y z) = Position x y z
+      newPos = ((V3 distance distance distance)
+                * (forward (Rotation ((yaw * speed) * time) ((pitch * speed) * time) 0)))
 
-flapSound :: Bird -> Keyboard -> Mouse -> Maybe Sound
-flapSound _ keyboard mouse =
-  if isFlapping keyboard mouse then
-    Just (Sound "flap.ogg")
-  else
-    Nothing
+random0Or255 :: IO Int
+random0Or255 = do
+    -- Get a random integer that is either 0 or 1
+    r <- randomRIO (0, 1) :: IO Int
 
--- | Spawns new pipes when PipeTimer reaches zero
-spawnPipes :: Bird -> PipeTimer -> Time -> Scene ()
-spawnPipes _ (PipeTimer timer) timeStep = do
-  resource (PipeTimer (timer - timeStep))
+    -- Map the result
+    return $ if r == 0
+        then 0
+        else 255
 
-  when (timer <= 0) $ do
-    let pipeSprHeight = 200
-        pipeEndHeight = 12
+spawnRandomCube :: Scene ()
+spawnRandomCube = do
+  r <- liftIO random0Or255
+  g <- liftIO random0Or255
+  b <- liftIO random0Or255
 
-    gapCenterY <- liftIO $ randomRIO
-      (pipeEndHeight + (pipeGap / 2),
-       pipeSprHeight - (pipeEndHeight + (pipeGap / 2)))
+  distance <- liftIO $ randomRIO (15, 30) :: Scene Float
+  yaw <- liftIO $ randomRIO (1, -1) :: Scene Float
+  pitch <- liftIO $ randomRIO (1, -1) :: Scene Float
+  speed <- liftIO $ randomRIO (20, 200) :: Scene Float
 
-    spawn (Pipe { wasPassed = False, isTop = False})
-          (Sprite "pipeBottom.png")
-          (Position 144 (gapCenterY + (pipeGap / 2)) 0.1)
-          (Collider 0 0 26 200)
-          (Velocity (-scrollSpeed) 0 0)
-
-    spawn (Pipe { wasPassed = False, isTop = True})
-          (Sprite "pipeTop.png")
-          (Position 144 ((-pipeSprHeight) + (gapCenterY - (pipeGap / 2))) 0.5)
-          (Collider 0 0 26 200)
-          (Velocity (-scrollSpeed) 0 0.1)
-
-    -- reset the pipe timer
-    resource (PipeTimer pipeRate)
-
--- | For despawning any entities that go offscreen to the left
-despawnPipes :: Position -> Scene ()
-despawnPipes pos = when (x pos < -26) despawn
-
--- | Updates the (x, y) part of the (x, y, w, h) colliders
-updateColliders :: Position -> Collider -> Collider
-updateColliders pos (Collider _ _ w h) = Collider (x pos) (y pos) w h
-
-startGame :: Tap -> Sprite -> Mouse -> Keyboard -> Scene ()
-startGame _ (Sprite spr) mouse keyboard =
-  when (isFlapping keyboard mouse) $ case () of
-    -- | Tapping to start the game adds the
-    -- 'Bird' and 'Velocity' components to the bird
-    _ | spr `elem` birdAnimation -> do
-          remove Tap
-          set Bird
-          set Gravity
-          set (Velocity 0 0 0)
-          spawn ScoreCounter
-                (Position 72 30 1)
-                (Font "font.png")
-
-      -- Tapping to start de-spawns the "Tap" graphic
-      | spr == "tap.png" -> despawn
-      | otherwise -> return ()
-
--- | Collision/death system
-collision :: Bird -> Collider -> Every Collider -> Time -> Score -> Scene ()
-collision bird (Collider posX posY width height) (Every colliders) t
-          (Score lastScore bestScore) = do
-  let overlaps = map (\(Collider x y w h)
-        -> (posX + (width - 3)) >= x && (posX) < x + w &&
-           (posY + height) >= y && (posY) < y + h) colliders
-  when (or overlaps) $ do
-    set $ Sound "death.ogg"
-    remove bird -- remove the Bird component from the bird after death
-    system (\(vel :: Velocity) -> Velocity 0 (y vel) 0) -- stop anything from scrolling
-    system (\(_ :: ScoreCounter) -> despawn :: Scene ()) -- remove the score counter
-
-    let onScoreboard x y =
-          [Frame (70, Position (15 + x) (210 + y) 2),
-           Frame (80, Position (15 + x) (86 + y) 2),
-           Frame (100, Position (15 + x) (110 + y) 2)]
-
-    spawn (Sprite "gameOver.png")
-          (Animation (onScoreboard 0 (-30)) 1)
-
-    spawn (Sprite "scoreboard.png")
-          (Animation (onScoreboard 0 0) 1)
-
-    spawn (Text (show lastScore) 15 AlignLeft)
-          (Font "font.png")
-          (Animation (onScoreboard 90 17) 1)
-
-    spawn (Text (show bestScore) 15 AlignLeft)
-          (Font "font.png")
-          (Animation (onScoreboard 90 37) 1)
-
-    spawn OkButton { active = False }
-          (Sprite "ok.png")
-          (Position 51 222 4)
-          (Animation (onScoreboard 36 112
-                        ++ [Frame (80, OkButton { active = False }),
-                            Frame (90, OkButton { active = True })]) 1)
-
-restartGame :: OkButton -> Position -> Keyboard -> Mouse -> Scene ()
-restartGame (OkButton { active = True }) btnPos keyboard mouse =
-  when (isFlapping keyboard mouse) $ do
-    set (Animation [Frame (0, btnPos + Position 0 0 0),
-                    Frame (20, btnPos + Position 0 4 0),
-                    Frame (30, btnPos - Position 0 1 0),
-                    Frame (50, btnPos),
-                    Frame (100, btnPos)] 0.5)
-
-    remove (OkButton True) -- make it so they can't press again
-    
-    set (Sound "swoosh.ogg")
-
-    -- drop the curtain
-    spawn Rectangle
-          (Color 0 0 0 0)
-          (Position 0 0 4)
-          (Size 144 256 0)
-          (Animation [Frame (0, Color 0 0 0 0),
-                      Frame (50, Color 0 0 0 255),
-                      Frame (100, Color 0 0 0 0)] 1)
-    
-    -- reset half-way through the animation
-    resource (ResetTimer 0.5)
-
-restartGame _ _ _ _ = pure ()
-
-resetWorld :: ResetTimer -> Time -> Score -> Scene ResetTimer
-resetWorld (ResetTimer timer) t (Score _ best) = case () of
-  _ | timer > 0 -> return (ResetTimer (timer - t))
-    | otherwise -> do
-      system (\(_ :: Not Rectangle) -> despawn :: Scene ())
-      resource (Score 0 best)
-      setupScene
-      return (ResetTimer 999999999999)
-
--- | Add score when a pipe that hasn't already been passed
--- goes past a certain point
-score :: Pipe -> Position -> Score -> Scene (Pipe, Score)
-score (Pipe { wasPassed = False, isTop = True }) pos (Score cur best) =
-  if x pos < 28 then do
-    set (Sound "score.ogg")
-    return (Pipe True True, Score (cur + 1) (max (cur + 1) best))
-  else do
-    return (Pipe False True, Score cur best)
-score p _ s = return (p, s)
-
-scoreCounter :: ScoreCounter -> Score -> Text
-scoreCounter _ (Score currentScore _) =
-  Text (show currentScore) 21 AlignCenter
-
-birdDive :: Bird -> Velocity -> Angle
-birdDive _ (Velocity 0 vy _)
-  = Angle (max (-30) (min 90 (vy * 0.3)))
-
-setupScene :: Scene ()
-setupScene = do
-  spawn (Sprite "backdrop.png")
+  spawn (Cube)
+        (Color (fromIntegral r) (fromIntegral g) (fromIntegral b) 255)
+        (Orbit distance yaw pitch)
         (Position 0 0 0)
-
-  spawn Ground
-        (Sprite "ground.png")
-        (Position 0 200 1)
-        (Collider 0 0 168 56)
-        (Velocity (-scrollSpeed) 0 0)
-
-  -- Bird
-  spawn Tap
-        (Sprite "bird.png")
-        (Position 20 116 0.5)
-        (Collider 0 0 17 12)
-        (Animation (map (Frame . Sprite) birdAnimation) (loop 0.4))
-
-  spawn Tap
-        (Sprite "tap.png")
-        (Position 40 116 1)
+        (Speed speed)
 
 main :: IO ()
 main = do
   runGame $ do
-    resource $ Window {
-      title = "Flappy",
-      res = (144, 256),
-      size = Automatic,
-      targetFps = 300,
-      captureCursor = False,
-      backend = raylibBackend,
-      onWebPlatform = False,
-      exit = False
-    }
+    spawn (Camera3D 100)
+          (Position 0 0 0)
+          (Rotation 5 0 0)
 
-    resource (PipeTimer pipeRate)
-    resource (Score 0 0)
-
-    setupScene
+    replicateM_ 200 spawnRandomCube
 
     gameLoop $ do
-      system startGame
-      system gravity
-      system move
-      system scrollGround
-      system flap
-      system flapSound
-      system birdDive
-      system spawnPipes
-      system despawnPipes
-      system updateColliders
-      system collision
-      system animate
-      system score
-      system scoreCounter
-      system restartGame
-      system resetWorld
+      system rainbow
+      system fall
+      system spin
+      system movement
+      system look
+      system orbit
