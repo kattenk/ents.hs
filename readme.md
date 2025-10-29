@@ -140,6 +140,4 @@ For fun I wrote some code that spawns cubes and makes them fly around:
 replicateM_ 200 spawnRandomCube
 ```
 
-<img src="assets/tutorial/manycubes.gif" width="300em">
-
-> (note if this GIF appears laggy that's not what it actually feels like, at least on my machine it can handle many hundreds of cubes without lagging, however the engine itself is not optimized at all, so don't expect performance for other things just because of this,)
+https://github.com/user-attachments/assets/38d901bb-d850-45a4-b4f2-5956803bbd02
