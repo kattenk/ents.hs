@@ -92,7 +92,7 @@ spin (Rotation yaw pitch roll) t (Spin speed) =
 		   (pitch + (speed * t))
 		   (roll + (speed * t))
 ```
-After adding `Rotation` and `Color` and `Spin` to the cube, we can hook these systems up to the game loop with:
+After adding `Rotation` and `Color` and `Spin` to the cube, Hook these systems up to the game loop with:
 ```haskell
 gameLoop $ do
   system spin
@@ -101,7 +101,7 @@ gameLoop $ do
 
 <img src="assets/tutorial/raincube.gif" width="30%" height="30%">
 
-We can spawn a `Camera3D` to control the location of the 3D camera
+Spawn a `Camera3D` to control the location of the 3D camera
 ```haskell
 spawn (Camera3D 100) -- 100 is FOV
       (Position 0 0 0)
