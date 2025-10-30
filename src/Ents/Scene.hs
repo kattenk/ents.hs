@@ -236,11 +236,11 @@ spawn' adders = do
     (i:is) -> do
       -- this index is no longer re-useable
       put $ scnState { reusableIndices = is }
-      liftIO $ putStrLn $ "Re-using index: " ++ show i
+      -- liftIO $ putStrLn $ "Re-using index: " ++ show i
       return i
     [] -> do
       ec <- gets entityCount
-      liftIO $ putStrLn $ "Growing vector length from " ++ show ec ++ " to " ++ show (ec + 1)
+      -- liftIO $ putStrLn $ "Growing vector length from " ++ show ec ++ " to " ++ show (ec + 1)
       put $ scnState { entityCount = ec + 1 }
 
       -- grow all of the existing component vectors to fit the new entity

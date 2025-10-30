@@ -1,6 +1,4 @@
-{-# LANGUAGE CPP #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE CPP, ScopedTypeVariables, StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 -- |
 -- Module      : Ents.Engine
@@ -10,7 +8,7 @@
 -- and resources. displays the Window, renders Sprites, Text,
 -- plays Sounds, etc
 
-module Ents.Engine (start, runSystems, shutdown) where
+module Ents.Engine (start, runSystems, shutdown, CustomRender(..)) where
   
 import Ents.Resources
 import Ents.Components
@@ -21,7 +19,7 @@ import qualified Raylib.Core as RL
 import qualified Raylib.Util as RL
 import qualified Raylib.Core.Audio as RL
 import Data.Proxy
-import Control.Monad (when, filterM)
+import Control.Monad (when, filterM, unless)
 import qualified Raylib.Util.Colors as RL
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -43,11 +41,20 @@ import qualified Raylib.Core.Models as RL
 import qualified Raylib.Core.Shapes as RL
 import qualified Data.Set as Set
 
+-- | This type acts as a switch, use 'resource CustomRender',
+-- and the engine won't call Raylib's EndDrawing function,
+-- so you can make systems, etc. that do rendering, just remember to call
+-- it yourself
+data CustomRender = CustomRender
+
 windowPixelSize :: Window -> IO (Int, Int)
 windowPixelSize win = do
+#ifndef WEB
   monitor <- liftIO RL.getCurrentMonitor
   monitorWidth <- liftIO $ RL.getMonitorWidth monitor
-
+#else
+  let monitorWidth = (fst (res win)) * 6
+#endif
   return $
     case windowSize win of
       ExactWinSize size -> size
@@ -109,10 +116,14 @@ start win = do
 
 exitOnClose :: Window -> Scene ()
 exitOnClose win = do
+#ifndef WEB
   shouldClose <- liftIO RL.windowShouldClose
 
   when shouldClose $ do
     resource $ win { exit = True }
+#else
+  return ()
+#endif
 
 updateTime :: Scene Time
 updateTime = do
@@ -123,12 +134,12 @@ addTime (TimeElapsed t) d = TimeElapsed (t + d)
 
 deriving instance Bounded RL.KeyboardKey
 
--- Only includes keys A-Z
+-- Only includes keys A-Z and Space
 updateKeyboard :: Scene Keyboard
 updateKeyboard = do
-  downs <- filterM (liftIO . RL.isKeyDown) [RL.KeyA .. RL.KeyZ]
-  pressed <- filterM (liftIO . RL.isKeyPressed) [RL.KeyA .. RL.KeyZ]
-  released <- filterM (liftIO . RL.isKeyReleased) [RL.KeyA .. RL.KeyZ]
+  downs <- filterM (liftIO . RL.isKeyDown) (RL.KeySpace : [RL.KeyA .. RL.KeyZ])
+  pressed <- filterM (liftIO . RL.isKeyPressed) (RL.KeySpace : [RL.KeyA .. RL.KeyZ])
+  released <- filterM (liftIO . RL.isKeyReleased) (RL.KeySpace : [RL.KeyA .. RL.KeyZ])
 
   return Keyboard {
     downKeys = Set.fromList downs,
@@ -194,6 +205,14 @@ getFontHandle fileName =
                     assets { fonts = Map.insert fileName font (fonts assets )})
                  fileName
 
+getSoundHandle :: String -> Scene RL.Sound
+getSoundHandle fileName =
+  getAssetHandle RL.loadSound
+                 sounds
+                 (\sound assets ->
+                    assets { sounds = Map.insert fileName sound (sounds assets )})
+                 fileName
+
 toRaylibColor :: Color -> RL.Color
 toRaylibColor (Color r g b a) =
   RL.Color (round r)
@@ -243,7 +262,7 @@ drawSprites cmds = do
   let sortedCmds = sortOn ((\(V3 _ _ z_) -> z_) . sprPosition) cmds
 -- DrawTexturePro(Texture2D texture, Rectangle source, Rectangle dest,
                -- Vector2 origin, float rotation, Color tint);
-  liftIO $ RL.beginBlendMode RL.BlendAlpha
+  -- liftIO $ RL.beginBlendMode RL.BlendAlpha
   mapM_ (\cmd -> do
     liftIO $ RL.drawTexturePro (sprTexture cmd)
                             (RL.Rectangle 0 0 (fromIntegral (RL.texture'width (sprTexture cmd)))
@@ -254,7 +273,7 @@ drawSprites cmds = do
                                           (y (sprSize cmd)))
                             (V2 (x (sprSize cmd) / 2) (y (sprSize cmd) / 2)) (sprAngle cmd) (sprTint cmd)) sortedCmds
 
-  liftIO RL.endBlendMode
+  -- liftIO RL.endBlendMode
 
 loadFont' :: String -> IO (Ptr RL.Font)
 loadFont' path = withCString path RL.c'loadFont
@@ -267,6 +286,7 @@ drawTextEx' font text position fontSize spacing color = do
       withCString text $ \cText ->
         RL.c'drawTextEx font cText posPtr (realToFrac fontSize) (realToFrac spacing) colorPtr
 
+#ifndef WEB
 drawText :: Text -> Position -> Maybe Color -> Maybe Font -> Scene ()
 drawText (Text text size align) pos color maybeFont = do
   maybeWin <- get (Proxy :: Proxy Window)
@@ -282,6 +302,7 @@ drawText (Text text size align) pos color maybeFont = do
         textWidthPtr <- withCString text $ \cText ->
             RL.c'measureTextEx font cText (realToFrac scaledSize) 3
         textWidthVec <- peek textWidthPtr
+        
         let textWidth = vector2'x textWidthVec
             position = case align of
                           AlignLeft -> V2 (x pos * scale) (y pos * scale)
@@ -292,6 +313,29 @@ drawText (Text text size align) pos color maybeFont = do
 
         drawTextEx' font text position scaledSize 3
           (toRaylibColor (fromMaybe (Color 255 255 255 255) color))
+#else
+drawText :: Text -> Position -> Font -> Scene ()
+drawText (Text text size align) pos (Font fontName) = do
+  maybeWin <- get (Proxy :: Proxy Window)
+  case maybeWin of
+    Nothing -> return ()
+    Just win -> do
+      scale <- liftIO $ getScale win
+      let scaledSize = size * scale
+      
+      textWidth <- liftIO $ RL.measureText text (round scaledSize)
+      let position = case align of
+                      AlignLeft -> V2 (x pos * scale) (y pos * scale)
+                      AlignCenter -> V2 ((x pos * scale) - (fromIntegral textWidth / 2))
+                                        (y pos * scale)
+                      AlignRight -> V2 ((x pos * scale) - fromIntegral textWidth)
+                                       (y pos * scale)
+      font <- getFontHandle fontName
+      liftIO $ drawTextEx' font text position scaledSize 3 (RL.Color 255
+                                                       255
+                                                       255
+                                                       255)
+#endif
 
 --
 -- 3D stuff
@@ -348,7 +392,19 @@ drawRectangles _ (Position x' y' _) (Size sx sy _) maybeColor = do
       scale <- liftIO $ getScale win
       liftIO $ RL.beginBlendMode RL.BlendAlpha
       liftIO $ RL.drawRectangleRec (RL.Rectangle (x' * scale) (y' * scale) (sx * scale) (sy * scale)) color
+      liftIO $ RL.endBlendMode
         where color = toRaylibColor (fromMaybe (Color 255 255 255 255) maybeColor)
+      
+
+--
+-- Sound
+--
+
+playSounds :: Sound -> Scene ()
+playSounds (Sound fileName) = do
+  snd' <- getSoundHandle fileName
+  liftIO $ RL.playSound snd'
+  remove (Proxy :: Proxy Sound)
 
 runSystems :: Window -> Scene ()
 runSystems _ = do
@@ -367,7 +423,12 @@ runSystems _ = do
   system drawRectangles
   system updateCameras
   system drawCubes
-  liftIO RL.endDrawing
+
+  hasCustomRendering <- has (Proxy :: Proxy CustomRender)
+  unless hasCustomRendering $ do
+    liftIO RL.endDrawing
+
+  system playSounds
 
   return ()
 

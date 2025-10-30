@@ -25,7 +25,7 @@ module Ents.Systems (
 
 import Ents.Scene
 import Data.Data (Proxy(..))
-import Data.Typeable (Typeable, typeOf)
+import Data.Typeable (Typeable)
 import Control.Monad (filterM, forM_)
 import Control.Monad.State.Strict hiding (get)
 import Data.Maybe (catMaybes)
@@ -137,6 +137,9 @@ class SystemResult r where
 instance {-# OVERLAPPABLE #-} (Typeable a) => SystemResult a where
   handleResult a = do
     set a
+
+instance {-# OVERLAPPABLE #-} SystemResult () where
+  handleResult _ = return ()
 
 instance {-# OVERLAPPABLE #-} (Typeable a, SystemResult a) =>
   SystemResult (Scene a) where

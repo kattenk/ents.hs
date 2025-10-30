@@ -5,10 +5,10 @@
 
 module Main (main) where
 import Ents
+import Ents.Extra.Animation
 import Control.Monad (when)
 import System.Random (randomRIO)
 import Data.Proxy
-import Debug.Trace (trace)
 
 -- Game parameters
 scrollSpeed = 55
@@ -27,7 +27,7 @@ data Bird = Bird       -- ^ For the bird (when playing)
 data Gravity = Gravity -- ^ Affected by gravity
 data Ground = Ground   -- ^ For the ground
 data Tap = Tap         -- ^ Relating to the "Tap" graphic at the start of the game
-data Pipe = Pipe { wasPassed :: Bool, isTop :: Bool }
+newtype Pipe = Pipe { wasPassed :: Bool }
 newtype OkButton = OkButton { active :: Bool }
 data Score = Score Int Int
 data ScoreCounter = ScoreCounter
@@ -87,13 +87,13 @@ spawnPipes _ (PipeTimer timer) timeStep = do
       (pipeEndHeight + (pipeGap / 2),
        pipeSprHeight - (pipeEndHeight + (pipeGap / 2)))
 
-    spawn (Pipe { wasPassed = False, isTop = False})
+    spawn (Pipe { wasPassed = False })
           (Sprite "assets/pipeBottom.png")
           (Position 144 (gapCenterY + (pipeGap / 2)) 0.1)
           (Collider 0 0 26 200)
           (Velocity (-scrollSpeed) 0 0)
 
-    spawn (Pipe { wasPassed = False, isTop = True})
+    spawn (Pipe { wasPassed = False })
           (Sprite "assets/pipeTop.png")
           (Position 144 ((-pipeSprHeight) + (gapCenterY - (pipeGap / 2))) 0.5)
           (Collider 0 0 26 200)
@@ -125,7 +125,7 @@ startGame _ (Sprite spr) mouse keyboard =
                 (Font "assets/font.png")
 
       -- Tapping to start de-spawns the "Tap" graphic
-      | spr == "assets/tap.png" -> trace spr despawn
+      | spr == "assets/tap.png" -> despawn
       | otherwise -> return ()
 
 -- | Collision/death system
@@ -133,8 +133,8 @@ collision :: Bird -> Collider -> Every Collider -> Time -> Score -> Scene ()
 collision bird (Collider posX posY width height) (Every colliders) t
           (Score lastScore bestScore) = do
   let overlaps = map (\(Collider x y w h)
-        -> (posX + (width - 3)) >= x && (posX) < x + w &&
-           (posY + height) >= y && (posY) < y + h) colliders
+        -> (posX + (width - 3)) >= x && posX < x + w &&
+           (posY + height) >= y && posY < y + h) colliders
   when (or overlaps) $ do
     set $ Sound "assets/death.ogg"
     remove (Proxy :: Proxy Bird) -- remove the Bird component from the bird after death
@@ -207,12 +207,12 @@ resetWorld (ResetTimer timer) t (Score _ best) = case () of
 -- | Add score when a pipe that hasn't already been passed
 -- goes past a certain point
 score :: Pipe -> Position -> Score -> Scene (Pipe, Score)
-score (Pipe { wasPassed = False, isTop = True }) pos (Score cur best) =
-  if x pos < 28 then do
+score (Pipe { wasPassed = False}) pos (Score cur best) =
+  if (x pos < 28) && (y pos < 0) then do
     set (Sound "assets/score.ogg")
-    return (Pipe True True, Score (cur + 1) (max (cur + 1) best))
+    return (Pipe True, Score (cur + 1) (max (cur + 1) best))
   else do
-    return (Pipe False True, Score cur best)
+    return (Pipe False, Score cur best)
 score p _ s = return (p, s)
 
 scoreCounter :: ScoreCounter -> Score -> Text
@@ -251,7 +251,7 @@ main = do
     resource $ Window {
       title = "Flappy",
       res = (144, 256),
-      windowSize = RelativeSize 25,
+      windowSize = RelativeSize 15,
       targetFps = 300,
       captureCursor = False,
       exit = False

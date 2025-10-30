@@ -91,10 +91,15 @@ library
     -- Base language which the package is written in.
     default-language: Haskell2010
 
-executable ents-app
+executable manycubes
   build-depends: ents, base, linear, containers, random
   main-is: Main.hs
-  hs-source-dirs: examples/app
+  hs-source-dirs: examples/manycubes
+
+executable dvdlogo
+  build-depends: ents, base, linear, containers, random
+  main-is: Main.hs
+  hs-source-dirs: examples/dvdlogo
 
 executable flappy
   build-depends: ents, base, linear, random

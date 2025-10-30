@@ -10,7 +10,7 @@
 
 module Ents.Resources (
   Window(..), WindowSize(..), defaultWindow,
-  Time(..), TimeElapsed(..), Keyboard(..), isPressed, wasPressed, Mouse(..)
+  Time, TimeElapsed(..), Keyboard(..), isPressed, wasPressed, Mouse(..)
 ) where
 
 import qualified Data.Set as Set

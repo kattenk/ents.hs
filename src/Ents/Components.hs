@@ -1,6 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, PatternSynonyms #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, PatternSynonyms, FlexibleInstances, UndecidableInstances #-}
 -- |
 -- Module      : Ents.Components
 -- License     : MIT

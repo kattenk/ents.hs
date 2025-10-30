@@ -7,7 +7,7 @@
 -- and 'gameLoop', which facilitate running the 'Scene' monad,
 -- invoking the engine's built-in systems and capping the framerate
 
-module Ents.Game (runGame, gameLoop) where
+module Ents.Game (runGame, gameLoop, getWindow) where
 import Ents.Resources
 import Ents.Scene
 import qualified Ents.Engine as Engine

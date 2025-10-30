@@ -8,10 +8,6 @@
 -- animate the values of components over time, all components are supported,
 -- although only instances of 'Animatable' can interpolate, etc, easings are not
 -- a thing although I think it would be easy to add.
---
--- Frames are either of the form (time, value) where time is the percentage
--- of the animation at which the component has that value, or just value, in which case
--- the times are evenly spaced out. You can also animate multiple components within the same animation.
 
 module Ents.Extra.Animation (
     Frame(..), Animation(..), FrameSpec(..), loop, animate
@@ -70,25 +66,6 @@ instance (t ~ Float) => FrameSpec (t, a) where
   time (t, _) = Just t
   value (_, a) = a
 
--- | Animates 'Sprite', lasting 5 seconds,
--- with three frames that are shown for an equal amount of time:
---
--- @
--- (Animation [Frame (Sprite "frameOne.png"),
---             Frame (Sprite "frameTwo.png")
---             Frame (Sprite "frameThree.png")] 5)
--- @
---
--- Animates 'Position' and 'Color' (which are lerped due to being 'Animatable' instances)
--- lasting 1.5 seconds and looping:
---
--- @
--- (Animation [Frame (0, Position 0 0 0),
---             Frame (50, Position 1 1 0),
---             Frame (100, Position 0 1.5 0),
---             Frame (0, Color 0 255 255 255),
---             Frame (100, Color 255 255 0 255)] (loop 1.5))
--- @
 data Frame =
   forall a. (Typeable a,
              FrameSpec a,
