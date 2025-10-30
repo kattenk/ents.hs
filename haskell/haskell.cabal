@@ -1,0 +1,26 @@
+cabal-version: 3.0
+name:          haskell
+version:       0.1.0.0
+
+flag web
+  description: Build targeting wasm
+  default: False
+  manual: True
+
+executable haskell
+  main-is:          Program.hs
+  build-depends:
+    , base
+    , h-raylib  >=5.5.2.1
+    , linear == 1.23.2
+    , ents
+
+  hs-source-dirs:   app
+  default-language: Haskell2010
+
+  if flag(web)
+    extra-lib-dirs: ../raylib/src
+    c-sources: web.c
+    ghc-options:
+      -no-hs-main -optl-mexec-model=reactor
+      "-optl-Wl,--export=hs_init,--export=startup,--export=mainLoop,--export=shouldClose,--export=teardown,--import-memory,--shared-memory,--max-memory=67108864,--no-check-features"
