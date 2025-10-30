@@ -82,7 +82,7 @@ rainbow (Color r g b a) timeStep
     changeAmount = (20 * 30) * timeStep
     clamp x = max 0 (min 255 x)
 ```
-And here's another system that changes `Rotation` and uses a custom component, `Spin`, to customize how fast it goes:
+And here's another system that changes `Rotation` and uses a custom component, `Spin`, to change how fast it goes:
 ```haskell
 newtype Spin = Spin { speed :: Float }
 
